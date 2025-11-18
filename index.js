@@ -31,7 +31,17 @@ const ERROR_CODES = {
     VALUE_OUT_OF_RANGE: 'VALUE_OUT_OF_RANGE',
     INVALID_NUMBER_FORMAT: 'INVALID_NUMBER_FORMAT',
     SATELLITE_NAME_TOO_LONG: 'SATELLITE_NAME_TOO_LONG',
-    SATELLITE_NAME_FORMAT_WARNING: 'SATELLITE_NAME_FORMAT_WARNING'
+    SATELLITE_NAME_FORMAT_WARNING: 'SATELLITE_NAME_FORMAT_WARNING',
+    // Deprecation and unusual value warnings
+    CLASSIFIED_DATA_WARNING: 'CLASSIFIED_DATA_WARNING',
+    STALE_TLE_WARNING: 'STALE_TLE_WARNING',
+    HIGH_ECCENTRICITY_WARNING: 'HIGH_ECCENTRICITY_WARNING',
+    LOW_MEAN_MOTION_WARNING: 'LOW_MEAN_MOTION_WARNING',
+    DEPRECATED_EPOCH_YEAR_WARNING: 'DEPRECATED_EPOCH_YEAR_WARNING',
+    REVOLUTION_NUMBER_ROLLOVER_WARNING: 'REVOLUTION_NUMBER_ROLLOVER_WARNING',
+    NEAR_ZERO_DRAG_WARNING: 'NEAR_ZERO_DRAG_WARNING',
+    NON_STANDARD_EPHEMERIS_WARNING: 'NON_STANDARD_EPHEMERIS_WARNING',
+    NEGATIVE_DECAY_WARNING: 'NEGATIVE_DECAY_WARNING'
 };
 
 /**
@@ -326,6 +336,183 @@ function validateNumericRange(value, fieldName, min, max) {
     }
 
     return { isValid: true, error: null };
+}
+
+/**
+ * Check for deprecated or unusual classification values
+ * @param {string} line1 - First TLE line
+ * @returns {array} - Array of warnings
+ */
+function checkClassificationWarnings(line1) {
+    const warnings = [];
+    const classification = line1[7];
+
+    if (classification === 'C' || classification === 'S') {
+        warnings.push({
+            code: ERROR_CODES.CLASSIFIED_DATA_WARNING,
+            message: `Classification '${classification}' is unusual in public TLE data (typically 'U' for unclassified)`,
+            field: 'classification',
+            value: classification,
+            severity: 'warning'
+        });
+    }
+
+    return warnings;
+}
+
+/**
+ * Check for stale/old epoch data
+ * @param {string} line1 - First TLE line
+ * @returns {array} - Array of warnings
+ */
+function checkEpochWarnings(line1) {
+    const warnings = [];
+
+    // Extract epoch year and day
+    const epochYear = parseInt(line1.substring(18, 20), 10);
+    const epochDay = parseFloat(line1.substring(20, 32));
+
+    if (isNaN(epochYear) || isNaN(epochDay)) {
+        return warnings; // Skip if invalid format
+    }
+
+    // Convert two-digit year to full year
+    // Years 57-99 are interpreted as 1957-1999, years 00-56 as 2000-2056
+    const fullYear = epochYear >= 57 ? 1900 + epochYear : 2000 + epochYear;
+
+    // Warn about deprecated epoch year range (1900s)
+    if (fullYear < 2000) {
+        warnings.push({
+            code: ERROR_CODES.DEPRECATED_EPOCH_YEAR_WARNING,
+            message: `Epoch year ${fullYear} is in the deprecated 1900s range (two-digit year: ${epochYear})`,
+            field: 'epochYear',
+            value: epochYear,
+            fullYear: fullYear,
+            severity: 'warning'
+        });
+    }
+
+    // Calculate the epoch date
+    const epochDate = new Date(fullYear, 0, 1); // January 1st of the epoch year
+    epochDate.setDate(epochDate.getDate() + epochDay - 1);
+
+    // Check if TLE is stale (older than 30 days)
+    const now = new Date();
+    const daysSinceEpoch = (now - epochDate) / (1000 * 60 * 60 * 24);
+
+    if (daysSinceEpoch > 30) {
+        warnings.push({
+            code: ERROR_CODES.STALE_TLE_WARNING,
+            message: `TLE epoch is ${Math.floor(daysSinceEpoch)} days old (epoch: ${epochDate.toISOString().split('T')[0]}). TLE data may be stale.`,
+            field: 'epoch',
+            daysSinceEpoch: Math.floor(daysSinceEpoch),
+            epochDate: epochDate.toISOString().split('T')[0],
+            severity: 'warning'
+        });
+    }
+
+    return warnings;
+}
+
+/**
+ * Check for unusual orbital parameters
+ * @param {string} line2 - Second TLE line
+ * @returns {array} - Array of warnings
+ */
+function checkOrbitalParameterWarnings(line2) {
+    const warnings = [];
+
+    // Eccentricity (stored as decimal without leading "0.")
+    const eccentricity = parseFloat('0.' + line2.substring(26, 33).trim());
+
+    if (!isNaN(eccentricity) && eccentricity > 0.25) {
+        warnings.push({
+            code: ERROR_CODES.HIGH_ECCENTRICITY_WARNING,
+            message: `Eccentricity ${eccentricity.toFixed(7)} is unusually high. This indicates a highly elliptical orbit.`,
+            field: 'eccentricity',
+            value: eccentricity,
+            severity: 'warning'
+        });
+    }
+
+    // Mean Motion (revolutions per day)
+    const meanMotion = parseFloat(line2.substring(52, 63).trim());
+
+    if (!isNaN(meanMotion) && meanMotion < 1.0) {
+        warnings.push({
+            code: ERROR_CODES.LOW_MEAN_MOTION_WARNING,
+            message: `Mean motion ${meanMotion.toFixed(8)} rev/day is unusually low. This indicates a very high orbit.`,
+            field: 'meanMotion',
+            value: meanMotion,
+            severity: 'warning'
+        });
+    }
+
+    // Revolution number near rollover
+    const revolutionNumber = parseInt(line2.substring(63, 68).trim(), 10);
+
+    if (!isNaN(revolutionNumber) && revolutionNumber > 90000) {
+        warnings.push({
+            code: ERROR_CODES.REVOLUTION_NUMBER_ROLLOVER_WARNING,
+            message: `Revolution number ${revolutionNumber} is approaching rollover limit (99999). Counter may reset soon.`,
+            field: 'revolutionNumber',
+            value: revolutionNumber,
+            severity: 'warning'
+        });
+    }
+
+    return warnings;
+}
+
+/**
+ * Check for unusual drag and ephemeris values
+ * @param {string} line1 - First TLE line
+ * @returns {array} - Array of warnings
+ */
+function checkDragAndEphemerisWarnings(line1) {
+    const warnings = [];
+
+    // B* drag term (ballistic coefficient)
+    const bStar = line1.substring(53, 61).trim();
+
+    // Check for near-zero or exactly zero drag
+    if (bStar === '00000-0' || bStar === '00000+0' || bStar === '00000 0') {
+        warnings.push({
+            code: ERROR_CODES.NEAR_ZERO_DRAG_WARNING,
+            message: 'B* drag term is zero or near-zero, which is unusual for most satellites in LEO',
+            field: 'bStar',
+            value: bStar,
+            severity: 'warning'
+        });
+    }
+
+    // First derivative of mean motion
+    const firstDerivative = parseFloat(line1.substring(33, 43).trim());
+
+    if (!isNaN(firstDerivative) && firstDerivative < 0) {
+        warnings.push({
+            code: ERROR_CODES.NEGATIVE_DECAY_WARNING,
+            message: `First derivative of mean motion is negative (${firstDerivative}), indicating orbital decay`,
+            field: 'firstDerivative',
+            value: firstDerivative,
+            severity: 'warning'
+        });
+    }
+
+    // Ephemeris type (should typically be 0 for SGP4/SDP4)
+    const ephemerisType = line1.substring(62, 63).trim();
+
+    if (ephemerisType !== '0' && ephemerisType !== '') {
+        warnings.push({
+            code: ERROR_CODES.NON_STANDARD_EPHEMERIS_WARNING,
+            message: `Ephemeris type '${ephemerisType}' is non-standard (expected '0' for SGP4/SDP4)`,
+            field: 'ephemerisType',
+            value: ephemerisType,
+            severity: 'warning'
+        });
+    }
+
+    return warnings;
 }
 
 /**
@@ -670,6 +857,23 @@ function validateTLE(tleString, options = {}) {
         }
     }
 
+    // Check for deprecated and unusual values (warnings only)
+    if (line1.length === 69) {
+        // Check classification warnings
+        warnings.push(...checkClassificationWarnings(line1));
+
+        // Check epoch warnings (stale data and deprecated year range)
+        warnings.push(...checkEpochWarnings(line1));
+
+        // Check drag and ephemeris warnings
+        warnings.push(...checkDragAndEphemerisWarnings(line1));
+    }
+
+    if (line2.length === 69) {
+        // Check orbital parameter warnings
+        warnings.push(...checkOrbitalParameterWarnings(line2));
+    }
+
     return {
         isValid: errors.length === 0,
         errors,
@@ -775,6 +979,10 @@ module.exports = {
     validateSatelliteNumber,
     validateClassification,
     validateNumericRange,
+    checkClassificationWarnings,
+    checkEpochWarnings,
+    checkOrbitalParameterWarnings,
+    checkDragAndEphemerisWarnings,
     normalizeLineEndings,
     parseTLELines,
     TLEValidationError,

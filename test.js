@@ -8,6 +8,10 @@ const {
     validateSatelliteNumber,
     validateClassification,
     validateNumericRange,
+    checkClassificationWarnings,
+    checkEpochWarnings,
+    checkOrbitalParameterWarnings,
+    checkDragAndEphemerisWarnings,
     normalizeLineEndings,
     parseTLELines,
     TLEValidationError,
@@ -637,6 +641,213 @@ try {
     assert(true, 'Satellite number validation still enforced');
 }
 
+// ===============================================
+// Tests for Deprecation and Unusual Value Warnings
+// ===============================================
+
+console.log('\n=== Deprecation and Unusual Value Warning Tests ===\n');
+
+// Test 57: Classification warning for 'C' (Classified)
+console.log('Test 57: Classification warning for "C" (Classified)');
+const classifiedTLE = `1 25544C 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(classifiedTLE);
+    const hasWarning = result.warnings && result.warnings.some(w => w.code === ERROR_CODES.CLASSIFIED_DATA_WARNING);
+    assert(hasWarning, 'Classification "C" generates warning');
+} catch (e) {
+    assert(false, 'Should not throw for valid classified TLE: ' + e.message);
+}
+
+// Test 43: Classification warning for 'S' (Secret)
+console.log('\nTest 43: Classification warning for "S" (Secret)');
+const secretTLE = `1 25544S 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(secretTLE);
+    const hasWarning = result.warnings && result.warnings.some(w => w.code === ERROR_CODES.CLASSIFIED_DATA_WARNING);
+    assert(hasWarning, 'Classification "S" generates warning');
+} catch (e) {
+    assert(false, 'Should not throw for valid secret TLE: ' + e.message);
+}
+
+// Test 44: No classification warning for 'U' (Unclassified)
+console.log('\nTest 44: No classification warning for "U" (Unclassified)');
+try {
+    const result = parseTLE(validTLE);
+    const hasWarning = result.warnings && result.warnings.some(w => w.code === ERROR_CODES.CLASSIFIED_DATA_WARNING);
+    assert(!hasWarning, 'Classification "U" does not generate warning');
+} catch (e) {
+    assert(false, 'Should not throw: ' + e.message);
+}
+
+// Test 45: Deprecated epoch year warning (1900s)
+console.log('\nTest 45: Deprecated epoch year warning (1900s)');
+const deprecatedYearTLE = `1 25544U 98067A   99300.83097691  .00001534  00000-0  35580-4 0  9992
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(deprecatedYearTLE);
+    const hasWarning = result.warnings && result.warnings.some(w => w.code === ERROR_CODES.DEPRECATED_EPOCH_YEAR_WARNING);
+    assert(hasWarning, 'Epoch year in 1900s generates warning');
+} catch (e) {
+    assert(false, 'Should not throw for old epoch year: ' + e.message);
+}
+
+// Test 46: Stale TLE warning (old data)
+console.log('\nTest 46: Stale TLE warning (old data)');
+// This TLE is from 2020, so it should be stale
+try {
+    const result = parseTLE(validTLE);
+    const hasWarning = result.warnings && result.warnings.some(w => w.code === ERROR_CODES.STALE_TLE_WARNING);
+    assert(hasWarning, 'Old TLE data generates stale warning');
+} catch (e) {
+    assert(false, 'Should not throw for stale TLE: ' + e.message);
+}
+
+// Test 47: High eccentricity warning
+console.log('\nTest 47: High eccentricity warning');
+const highEccTLE = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 3001671  64.9808  73.0513 15.49338189252421`;
+try {
+    const result = parseTLE(highEccTLE);
+    const hasWarning = result.warnings && result.warnings.some(w => w.code === ERROR_CODES.HIGH_ECCENTRICITY_WARNING);
+    assert(hasWarning, 'High eccentricity (>0.25) generates warning');
+} catch (e) {
+    assert(false, 'Should not throw for high eccentricity: ' + e.message);
+}
+
+// Test 48: Low mean motion warning
+console.log('\nTest 48: Low mean motion warning');
+const lowMeanMotionTLE = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513  0.49338189252422`;
+try {
+    const result = parseTLE(lowMeanMotionTLE);
+    const hasWarning = result.warnings && result.warnings.some(w => w.code === ERROR_CODES.LOW_MEAN_MOTION_WARNING);
+    assert(hasWarning, 'Low mean motion (<1.0) generates warning');
+} catch (e) {
+    assert(false, 'Should not throw for low mean motion: ' + e.message);
+}
+
+// Test 49: Revolution number rollover warning
+console.log('\nTest 49: Revolution number rollover warning');
+const highRevNumTLE = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189952425`;
+try {
+    const result = parseTLE(highRevNumTLE);
+    const hasWarning = result.warnings && result.warnings.some(w => w.code === ERROR_CODES.REVOLUTION_NUMBER_ROLLOVER_WARNING);
+    assert(hasWarning, 'Revolution number >90000 generates warning');
+} catch (e) {
+    assert(false, 'Should not throw for high revolution number: ' + e.message);
+}
+
+// Test 50: Near-zero drag warning
+console.log('\nTest 50: Near-zero drag (B*) warning');
+const zeroDragTLE = `1 25544U 98067A   20300.83097691  .00001534  00000-0  00000-0 0  9991
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(zeroDragTLE);
+    const hasWarning = result.warnings && result.warnings.some(w => w.code === ERROR_CODES.NEAR_ZERO_DRAG_WARNING);
+    assert(hasWarning, 'Near-zero B* drag term generates warning');
+} catch (e) {
+    assert(false, 'Should not throw for zero drag: ' + e.message);
+}
+
+// Test 51: Negative decay (first derivative) warning
+console.log('\nTest 51: Negative decay (negative first derivative) warning');
+const negativeDecayTLE = `1 25544U 98067A   20300.83097691 -.00001534  00000-0  35580-4 0  9997
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(negativeDecayTLE);
+    const hasWarning = result.warnings && result.warnings.some(w => w.code === ERROR_CODES.NEGATIVE_DECAY_WARNING);
+    assert(hasWarning, 'Negative first derivative generates warning');
+} catch (e) {
+    assert(false, 'Should not throw for negative derivative: ' + e.message);
+}
+
+// Test 52: Non-standard ephemeris type warning
+console.log('\nTest 52: Non-standard ephemeris type warning');
+const nonStdEphemTLE = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 2  9998
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(nonStdEphemTLE);
+    const hasWarning = result.warnings && result.warnings.some(w => w.code === ERROR_CODES.NON_STANDARD_EPHEMERIS_WARNING);
+    assert(hasWarning, 'Non-standard ephemeris type generates warning');
+} catch (e) {
+    assert(false, 'Should not throw for non-standard ephemeris: ' + e.message);
+}
+
+// Test 53: checkClassificationWarnings function directly
+console.log('\nTest 53: checkClassificationWarnings function');
+const classifiedLine = '1 25544C 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996';
+const classWarnings = checkClassificationWarnings(classifiedLine);
+assert(classWarnings.length > 0, 'checkClassificationWarnings detects classified data');
+assert(classWarnings[0].code === ERROR_CODES.CLASSIFIED_DATA_WARNING, 'Correct warning code');
+
+// Test 54: checkEpochWarnings function directly
+console.log('\nTest 54: checkEpochWarnings function');
+const oldEpochLine = '1 25544U 98067A   99300.83097691  .00001534  00000-0  35580-4 0  9992';
+const epochWarnings = checkEpochWarnings(oldEpochLine);
+assert(epochWarnings.length > 0, 'checkEpochWarnings detects old epoch');
+const hasDeprecatedWarning = epochWarnings.some(w => w.code === ERROR_CODES.DEPRECATED_EPOCH_YEAR_WARNING);
+assert(hasDeprecatedWarning, 'Deprecated epoch year warning present');
+
+// Test 55: checkOrbitalParameterWarnings function directly
+console.log('\nTest 55: checkOrbitalParameterWarnings function');
+const highEccLine = '2 25544  51.6453  57.0843 3001671  64.9808  73.0513 15.49338189252421';
+const orbitalWarnings = checkOrbitalParameterWarnings(highEccLine);
+assert(orbitalWarnings.length > 0, 'checkOrbitalParameterWarnings detects high eccentricity');
+const hasHighEccWarning = orbitalWarnings.some(w => w.code === ERROR_CODES.HIGH_ECCENTRICITY_WARNING);
+assert(hasHighEccWarning, 'High eccentricity warning present');
+
+// Test 56: checkDragAndEphemerisWarnings function directly
+console.log('\nTest 56: checkDragAndEphemerisWarnings function');
+const zeroDragLine = '1 25544U 98067A   20300.83097691  .00001534  00000-0  00000-0 0  9991';
+const dragWarnings = checkDragAndEphemerisWarnings(zeroDragLine);
+assert(dragWarnings.length > 0, 'checkDragAndEphemerisWarnings detects zero drag');
+const hasZeroDragWarning = dragWarnings.some(w => w.code === ERROR_CODES.NEAR_ZERO_DRAG_WARNING);
+assert(hasZeroDragWarning, 'Near-zero drag warning present');
+
+// Test 57: Multiple warnings in single TLE
+console.log('\nTest 57: Multiple warnings in single TLE');
+const multipleWarningsTLE = `1 25544C 98067A   99300.83097691 -.00001534  00000-0  00000-0 2  9990
+2 25544  51.6453  57.0843 3001671  64.9808  73.0513  0.49338189952422`;
+try {
+    const result = parseTLE(multipleWarningsTLE);
+    assert(result.warnings && result.warnings.length >= 5, 'Multiple warnings detected');
+} catch (e) {
+    assert(false, 'Should not throw for TLE with multiple warnings: ' + e.message);
+}
+
+// Test 58: Valid modern TLE with no unusual warnings (except stale date)
+console.log('\nTest 58: Valid modern TLE minimizes warnings');
+const modernTLE = `1 25544U 98067A   25300.83097691  .00001534  00000-0  35580-4 0  9991
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(modernTLE);
+    // Should have minimal warnings (no classification, eccentricity, etc. warnings)
+    const nonStaleWarnings = result.warnings ? result.warnings.filter(w => w.code !== ERROR_CODES.STALE_TLE_WARNING) : [];
+    assert(nonStaleWarnings.length === 0, 'Modern valid TLE has minimal warnings');
+} catch (e) {
+    assert(false, 'Should not throw for modern TLE: ' + e.message);
+}
+
+// Test 59: Warning severity is always 'warning'
+console.log('\nTest 59: All warnings have severity "warning"');
+try {
+    const result = parseTLE(multipleWarningsTLE);
+    const allWarnings = result.warnings.every(w => w.severity === 'warning');
+    assert(allWarnings, 'All warnings have severity "warning"');
+} catch (e) {
+    assert(false, 'Should not throw: ' + e.message);
+}
+
+// Test 60: validateTLE returns warnings
+console.log('\nTest 60: validateTLE function returns warnings');
+const validationResult = validateTLE(classifiedTLE);
+assert(validationResult.isValid, 'TLE is valid despite warnings');
+assert(validationResult.warnings.length > 0, 'validateTLE returns warnings array');
+const hasClassWarning = validationResult.warnings.some(w => w.code === ERROR_CODES.CLASSIFIED_DATA_WARNING);
+assert(hasClassWarning, 'validateTLE detects classification warning');
 console.log('\n=== Test Summary ===');
 console.log(`Total Tests: ${testsPassed + testsFailed}`);
 console.log(`Passed: ${testsPassed}`);
