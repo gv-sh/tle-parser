@@ -8,6 +8,8 @@ const {
     validateSatelliteNumber,
     validateClassification,
     validateNumericRange,
+    normalizeLineEndings,
+    parseTLELines,
     TLEValidationError,
     TLEFormatError,
     ERROR_CODES
