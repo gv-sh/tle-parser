@@ -71,6 +71,39 @@ class TLEFormatError extends Error {
 }
 
 /**
+ * Normalize line endings in TLE string to handle CRLF, LF, and CR variations
+ * @param {string} input - The input string with potentially mixed line endings
+ * @returns {string} - String with normalized line endings (LF only)
+ */
+function normalizeLineEndings(input) {
+    // Replace CRLF with LF, then replace any remaining CR with LF
+    return input.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+}
+
+/**
+ * Parse and normalize TLE lines, handling various whitespace edge cases
+ * @param {string} tleString - The raw TLE string
+ * @returns {Array<string>} - Array of cleaned TLE lines
+ */
+function parseTLELines(tleString) {
+    // First normalize line endings
+    const normalized = normalizeLineEndings(tleString);
+
+    // Split into lines, trim each line, and filter out empty lines
+    const lines = normalized
+        .split('\n')
+        .map(line => {
+            // Replace tabs with spaces for consistency
+            // This handles cases where tabs might be in the input
+            const spacedLine = line.replace(/\t/g, ' ');
+            return spacedLine.trim();
+        })
+        .filter(line => line.length > 0);
+
+    return lines;
+}
+
+/**
  * Calculate the checksum for a TLE line according to NORAD specification
  * @param {string} line - The TLE line to calculate checksum for
  * @returns {number} - The calculated checksum (0-9)
@@ -486,7 +519,7 @@ function checkDragAndEphemerisWarnings(line1) {
  * Validate TLE format compliance with comprehensive checks
  * Validates checksums for BOTH Line 1 and Line 2
  * @param {string} tleString - The TLE data string
- * @param {object} options - Validation options {strictChecksums: boolean, validateRanges: boolean}
+ * @param {object} options - Validation options {strictChecksums: boolean, validateRanges: boolean, mode: 'strict'|'permissive'}
  * @returns {object} - Validation result with detailed structured errors and warnings
  * @throws {TypeError} - If input types are invalid
  */
@@ -510,14 +543,23 @@ function validateTLE(tleString, options = {}) {
 
     const {
         strictChecksums = true,
-        validateRanges = true
+        validateRanges = true,
+        mode = 'strict'
     } = options;
+
+    // Validate mode parameter
+    if (mode !== 'strict' && mode !== 'permissive') {
+        throw new TypeError('Mode must be either "strict" or "permissive"');
+    }
 
     const errors = [];
     const warnings = [];
 
+    // Normalize line endings (handle CRLF, LF, CR)
+    const normalizedTLE = normalizeLineEndings(tleString);
+
     // Parse lines
-    const tleLines = tleString.trim().split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    const tleLines = normalizedTLE.trim().split('\n').map(line => line.trim()).filter(line => line.length > 0);
 
     // Check number of lines (can be 2 or 3, where line 0 is satellite name)
     if (tleLines.length < 2) {
@@ -582,67 +624,212 @@ function validateTLE(tleString, options = {}) {
     // Validate line structures
     const line1Result = validateLineStructure(line1, 1);
     if (!line1Result.isValid) {
-        errors.push(...line1Result.errors);
-        if (strictChecksums) {
-            return { isValid: false, errors, warnings };
+        // In permissive mode, checksum errors become warnings
+        if (mode === 'permissive') {
+            const criticalErrors = line1Result.errors.filter(e => e.code !== ERROR_CODES.CHECKSUM_MISMATCH && e.code !== ERROR_CODES.INVALID_CHECKSUM_CHARACTER);
+            const checksumErrors = line1Result.errors.filter(e => e.code === ERROR_CODES.CHECKSUM_MISMATCH || e.code === ERROR_CODES.INVALID_CHECKSUM_CHARACTER);
+
+            errors.push(...criticalErrors);
+            warnings.push(...checksumErrors.map(e => ({ ...e, severity: 'warning' })));
+
+            // Only return early for critical errors in permissive mode
+            if (criticalErrors.length > 0) {
+                return { isValid: false, errors, warnings };
+            }
+        } else {
+            // Strict mode: all errors are critical
+            errors.push(...line1Result.errors);
+            if (strictChecksums) {
+                return { isValid: false, errors, warnings };
+            }
         }
     }
 
     const line2Result = validateLineStructure(line2, 2);
     if (!line2Result.isValid) {
-        errors.push(...line2Result.errors);
-        if (strictChecksums) {
-            return { isValid: false, errors, warnings };
+        // In permissive mode, checksum errors become warnings
+        if (mode === 'permissive') {
+            const criticalErrors = line2Result.errors.filter(e => e.code !== ERROR_CODES.CHECKSUM_MISMATCH && e.code !== ERROR_CODES.INVALID_CHECKSUM_CHARACTER);
+            const checksumErrors = line2Result.errors.filter(e => e.code === ERROR_CODES.CHECKSUM_MISMATCH || e.code === ERROR_CODES.INVALID_CHECKSUM_CHARACTER);
+
+            errors.push(...criticalErrors);
+            warnings.push(...checksumErrors.map(e => ({ ...e, severity: 'warning' })));
+
+            // Only return early for critical errors in permissive mode
+            if (criticalErrors.length > 0) {
+                return { isValid: false, errors, warnings };
+            }
+        } else {
+            // Strict mode: all errors are critical
+            errors.push(...line2Result.errors);
+            if (strictChecksums) {
+                return { isValid: false, errors, warnings };
+            }
         }
     }
 
     // Validate satellite number consistency
     const satNumResult = validateSatelliteNumber(line1, line2);
     if (!satNumResult.isValid) {
-        errors.push(satNumResult.error);
+        if (mode === 'permissive') {
+            // In permissive mode, satellite number mismatch is a warning
+            warnings.push({ ...satNumResult.error, severity: 'warning' });
+        } else {
+            errors.push(satNumResult.error);
+        }
     }
 
     // Validate classification
     const classResult = validateClassification(line1);
     if (!classResult.isValid) {
-        errors.push(classResult.error);
+        if (mode === 'permissive') {
+            // In permissive mode, invalid classification is a warning
+            warnings.push({ ...classResult.error, severity: 'warning' });
+        } else {
+            errors.push(classResult.error);
+        }
     }
 
     // Validate ranges if requested
     if (validateRanges && line1.length === 69 && line2.length === 69) {
+        // Satellite Number (1-99999, 5 digits)
+        const satelliteNumber = line1.substring(2, 7).trim();
+        const satNumRangeResult = validateNumericRange(satelliteNumber, 'Satellite Number', 1, 99999);
+        if (!satNumRangeResult.isValid) {
+            if (mode === 'permissive') {
+                warnings.push({ ...satNumRangeResult.error, severity: 'warning' });
+            } else {
+                errors.push(satNumRangeResult.error);
+            }
+        }
+
+        // International Designator Year (0-99)
+        const intlDesigYear = line1.substring(9, 11).trim();
+        if (intlDesigYear.length > 0) {  // Field may be blank
+            const idyResult = validateNumericRange(intlDesigYear, 'International Designator Year', 0, 99);
+            if (!idyResult.isValid) {
+                if (mode === 'permissive') {
+                    warnings.push({ ...idyResult.error, severity: 'warning' });
+                } else {
+                    errors.push(idyResult.error);
+                }
+            }
+        }
+
+        // International Designator Launch Number (1-999)
+        const intlDesigLaunch = line1.substring(11, 14).trim();
+        if (intlDesigLaunch.length > 0) {  // Field may be blank
+            const idlResult = validateNumericRange(intlDesigLaunch, 'International Designator Launch Number', 1, 999);
+            if (!idlResult.isValid) {
+                if (mode === 'permissive') {
+                    warnings.push({ ...idlResult.error, severity: 'warning' });
+                } else {
+                    errors.push(idlResult.error);
+                }
+            }
+        }
+
+        // Ephemeris Type (0-9, single digit)
+        const ephemerisType = line1.substring(62, 63).trim();
+        if (ephemerisType.length > 0) {
+            const etResult = validateNumericRange(ephemerisType, 'Ephemeris Type', 0, 9);
+            if (!etResult.isValid) {
+                if (mode === 'permissive') {
+                    warnings.push({ ...etResult.error, severity: 'warning' });
+                } else {
+                    errors.push(etResult.error);
+                }
+            }
+        }
+
+        // Element Set Number (0-9999, 4 digits)
+        const elementSetNum = line1.substring(64, 68).trim();
+        if (elementSetNum.length > 0) {
+            const esnResult = validateNumericRange(elementSetNum, 'Element Set Number', 0, 9999);
+            if (!esnResult.isValid) {
+                if (mode === 'permissive') {
+                    warnings.push({ ...esnResult.error, severity: 'warning' });
+                } else {
+                    errors.push(esnResult.error);
+                }
+            }
+        }
+
+        // Epoch Year (0-99)
+        const epochYear = line1.substring(18, 20).trim();
+        const eyResult = validateNumericRange(epochYear, 'Epoch Year', 0, 99);
+        if (!eyResult.isValid) {
+            if (mode === 'permissive') {
+                warnings.push({ ...eyResult.error, severity: 'warning' });
+            } else {
+                errors.push(eyResult.error);
+            }
+        }
+
+        // Epoch Day (1-366.99999999)
+        const epochDay = line1.substring(20, 32).trim();
+        const edResult = validateNumericRange(epochDay, 'Epoch Day', 1, 366.99999999);
+        if (!edResult.isValid) {
+            if (mode === 'permissive') {
+                warnings.push({ ...edResult.error, severity: 'warning' });
+            } else {
+                errors.push(edResult.error);
+            }
+        }
+
         // Inclination (0-180 degrees)
         const inclination = line2.substring(8, 16).trim();
         const incResult = validateNumericRange(inclination, 'Inclination', 0, 180);
         if (!incResult.isValid) {
-            errors.push(incResult.error);
+            if (mode === 'permissive') {
+                warnings.push({ ...incResult.error, severity: 'warning' });
+            } else {
+                errors.push(incResult.error);
+            }
         }
 
         // Right Ascension (0-360 degrees)
         const rightAscension = line2.substring(17, 25).trim();
         const raResult = validateNumericRange(rightAscension, 'Right Ascension', 0, 360);
         if (!raResult.isValid) {
-            errors.push(raResult.error);
+            if (mode === 'permissive') {
+                warnings.push({ ...raResult.error, severity: 'warning' });
+            } else {
+                errors.push(raResult.error);
+            }
         }
 
         // Eccentricity (0-1, stored as decimal without leading 0.)
         const eccentricity = '0.' + line2.substring(26, 33).trim();
         const eccResult = validateNumericRange(eccentricity, 'Eccentricity', 0, 1);
         if (!eccResult.isValid) {
-            errors.push(eccResult.error);
+            if (mode === 'permissive') {
+                warnings.push({ ...eccResult.error, severity: 'warning' });
+            } else {
+                errors.push(eccResult.error);
+            }
         }
 
         // Argument of Perigee (0-360 degrees)
         const argPerigee = line2.substring(34, 42).trim();
         const apResult = validateNumericRange(argPerigee, 'Argument of Perigee', 0, 360);
         if (!apResult.isValid) {
-            errors.push(apResult.error);
+            if (mode === 'permissive') {
+                warnings.push({ ...apResult.error, severity: 'warning' });
+            } else {
+                errors.push(apResult.error);
+            }
         }
 
         // Mean Anomaly (0-360 degrees)
         const meanAnomaly = line2.substring(43, 51).trim();
         const maResult = validateNumericRange(meanAnomaly, 'Mean Anomaly', 0, 360);
         if (!maResult.isValid) {
-            errors.push(maResult.error);
+            if (mode === 'permissive') {
+                warnings.push({ ...maResult.error, severity: 'warning' });
+            } else {
+                errors.push(maResult.error);
+            }
         }
 
         // Mean Motion (revolutions per day, typically 0-20)
@@ -656,18 +843,17 @@ function validateTLE(tleString, options = {}) {
             });
         }
 
-        // Epoch Year (00-99)
-        const epochYear = line1.substring(18, 20).trim();
-        const eyResult = validateNumericRange(epochYear, 'Epoch Year', 0, 99);
-        if (!eyResult.isValid) {
-            errors.push(eyResult.error);
-        }
-
-        // Epoch Day (1-366.99999999)
-        const epochDay = line1.substring(20, 32).trim();
-        const edResult = validateNumericRange(epochDay, 'Epoch Day', 1, 366.99999999);
-        if (!edResult.isValid) {
-            errors.push(edResult.error);
+        // Revolution Number (0-99999, 5 digits)
+        const revolutionNumber = line2.substring(63, 68).trim();
+        if (revolutionNumber.length > 0) {
+            const rnResult = validateNumericRange(revolutionNumber, 'Revolution Number', 0, 99999);
+            if (!rnResult.isValid) {
+                if (mode === 'permissive') {
+                    warnings.push({ ...rnResult.error, severity: 'warning' });
+                } else {
+                    errors.push(rnResult.error);
+                }
+            }
         }
     }
 
@@ -698,7 +884,7 @@ function validateTLE(tleString, options = {}) {
 /**
  * Parse TLE data with optional validation
  * @param {string} tleString - The TLE data string
- * @param {object} options - Parsing options {validate: boolean, strictChecksums: boolean, validateRanges: boolean, includeWarnings: boolean}
+ * @param {object} options - Parsing options {validate: boolean, strictChecksums: boolean, validateRanges: boolean, includeWarnings: boolean, mode: 'strict'|'permissive'}
  * @returns {object} - Parsed TLE object with optional warnings array
  * @throws {TypeError} - If input types are invalid
  * @throws {TLEValidationError} - If validation fails and validate option is true
@@ -717,13 +903,14 @@ function parseTLE(tleString, options = {}) {
         validate = true,
         strictChecksums = true,
         validateRanges = true,
-        includeWarnings = true
+        includeWarnings = true,
+        mode = 'strict'
     } = options;
 
     // Validate if requested
     let validationWarnings = [];
     if (validate) {
-        const validation = validateTLE(tleString, { strictChecksums, validateRanges });
+        const validation = validateTLE(tleString, { strictChecksums, validateRanges, mode });
         if (!validation.isValid) {
             // Create detailed error message
             const errorMessages = validation.errors.map(err =>
@@ -739,7 +926,10 @@ function parseTLE(tleString, options = {}) {
         validationWarnings = validation.warnings;
     }
 
-    const tleLines = tleString.trim().split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    // Normalize line endings (handle CRLF, LF, CR)
+    const normalizedTLE = normalizeLineEndings(tleString);
+
+    const tleLines = normalizedTLE.trim().split('\n').map(line => line.trim()).filter(line => line.length > 0);
 
     // Determine line indices
     let line1Index = 0;
@@ -793,6 +983,8 @@ module.exports = {
     checkEpochWarnings,
     checkOrbitalParameterWarnings,
     checkDragAndEphemerisWarnings,
+    normalizeLineEndings,
+    parseTLELines,
     TLEValidationError,
     TLEFormatError,
     ERROR_CODES

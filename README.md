@@ -5,6 +5,7 @@ A robust parser for TLE (Two-Line Element) satellite data with comprehensive inp
 ## Features
 
 - Parse TLE data with or without satellite name (2 or 3 line format)
+- Automatic line ending normalization (CRLF, LF, CR)
 - Comprehensive format validation
 - NORAD checksum verification
 - Field range validation
@@ -12,6 +13,11 @@ A robust parser for TLE (Two-Line Element) satellite data with comprehensive inp
 - Classification validation
 - Deprecation and unusual value warnings
 - Flexible validation options
+- **Robust edge case handling:**
+  - Cross-platform line ending support (CRLF, LF, CR, and mixed)
+  - Automatic whitespace normalization (leading/trailing/multiple empty lines)
+  - Tab character handling and conversion
+  - Unicode character support in satellite names
 
 ## Installation
 
@@ -68,6 +74,43 @@ console.log(result.satelliteName); // 'ISS (ZARYA)'
 const result = parseTLE(tleData, { validate: false });
 ```
 
+### Parsing Modes: Strict vs Permissive
+
+```javascript
+// Strict mode (default): Any validation error throws an exception
+const result1 = parseTLE(tleData, { mode: 'strict' });
+
+// Permissive mode: Parses imperfect data, collects non-critical errors as warnings
+const result2 = parseTLE(tleData, { mode: 'permissive' });
+console.log(result2.warnings); // Array of data quality issues
+
+// Permissive mode example with invalid checksum
+const imperfectTLE = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9995
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+
+try {
+    // In permissive mode, this succeeds with warnings
+    const result = parseTLE(imperfectTLE, { mode: 'permissive' });
+    console.log('Parsed successfully!');
+    console.log('Warnings:', result.warnings); // Contains checksum warning
+} catch (error) {
+    // Won't reach here for non-critical errors in permissive mode
+}
+```
+
+**Mode Behavior:**
+
+- **Strict Mode (default)**:
+  - Any validation error throws immediately
+  - Best for applications requiring perfect TLE data
+
+- **Permissive Mode**:
+  - Runs all validations but only throws on critical structural errors
+  - Non-critical errors (checksums, satellite number mismatch, range violations, invalid classification) become warnings
+  - Critical errors (invalid line count, line length, line numbers) still throw
+  - Returns parsed data with `warnings` array
+  - Best for working with imperfect or historical TLE data
+
 ### Custom Validation Options
 
 ```javascript
@@ -83,6 +126,12 @@ const result2 = parseTLE(tleData, {
     validate: true,
     strictChecksums: true,
     validateRanges: false     // Skip range checking
+});
+
+// Combine mode with other options
+const result3 = parseTLE(tleData, {
+    mode: 'permissive',      // Use permissive mode
+    validateRanges: false    // Disable range checking
 });
 ```
 
@@ -149,6 +198,32 @@ console.log('Expected:', result.expected);
 console.log('Actual:', result.actual);
 ```
 
+### Line Ending Normalization
+
+The parser automatically handles different line ending formats:
+
+```javascript
+const { parseTLE, normalizeLineEndings } = require('tle-parser');
+
+// Works with CRLF (Windows-style) line endings
+const tleCRLF = '1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996\r\n2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428';
+const result1 = parseTLE(tleCRLF);
+
+// Works with CR (old Mac-style) line endings
+const tleCR = '1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996\r2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428';
+const result2 = parseTLE(tleCR);
+
+// Works with LF (Unix-style) line endings
+const tleLF = '1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996\n2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428';
+const result3 = parseTLE(tleLF);
+
+// You can also normalize line endings manually
+const normalized = normalizeLineEndings(tleCRLF);
+console.log(normalized); // All line endings converted to \n
+```
+
+The parser automatically converts all line ending types (CRLF, CR, LF) to LF (`\n`) before processing, ensuring consistent parsing regardless of the source platform or file format.
+
 ## API Reference
 
 ### `parseTLE(tleString, options)`
@@ -159,12 +234,18 @@ Parses TLE data and returns an object with all fields.
 - `tleString` (string): The TLE data (2 or 3 lines)
 - `options` (object, optional):
   - `validate` (boolean, default: `true`): Enable/disable validation
+  - `mode` (string, default: `'strict'`): Parsing mode - `'strict'` or `'permissive'`
   - `strictChecksums` (boolean, default: `true`): Enforce checksum validation
   - `validateRanges` (boolean, default: `true`): Validate field value ranges
+  - `includeWarnings` (boolean, default: `true`): Include warnings in result
 
-**Returns:** Object with parsed TLE fields
+**Returns:** Object with parsed TLE fields and optional `warnings` array
 
 **Throws:** Error if validation fails and `validate` is `true`
+
+**Mode Details:**
+- `'strict'`: Any validation error throws an exception (default behavior)
+- `'permissive'`: Only critical structural errors throw; non-critical errors become warnings
 
 ### `validateTLE(tleString, options)`
 
@@ -173,6 +254,7 @@ Validates TLE format compliance without parsing.
 **Parameters:**
 - `tleString` (string): The TLE data
 - `options` (object, optional):
+  - `mode` (string, default: `'strict'`): Validation mode - `'strict'` or `'permissive'`
   - `strictChecksums` (boolean, default: `true`)
   - `validateRanges` (boolean, default: `true`)
 
@@ -180,6 +262,10 @@ Validates TLE format compliance without parsing.
 - `isValid` (boolean): Overall validation result
 - `errors` (array): List of validation errors
 - `warnings` (array): List of validation warnings
+
+**Mode Details:**
+- `'strict'`: Errors include all validation failures
+- `'permissive'`: Only critical errors in `errors` array; non-critical issues in `warnings` array
 
 ### `calculateChecksum(line)`
 
@@ -203,6 +289,15 @@ Validates the checksum of a TLE line.
 - `actual` (number): Checksum from line
 - `error` (string): Error message if invalid
 
+### `normalizeLineEndings(text)`
+
+Normalizes line endings to LF (\n), converting CRLF (\r\n) and CR (\r) to LF.
+
+**Parameters:**
+- `text` (string): Text with any line ending format
+
+**Returns:** string with normalized line endings (all converted to \n)
+
 ### Other Validation Functions
 
 - `validateLineStructure(line, expectedLineNumber)`: Validates line format
@@ -218,6 +313,82 @@ These functions check for deprecated or unusual values and return warnings:
 - `checkEpochWarnings(line1)`: Detects stale TLE data and deprecated epoch years
 - `checkOrbitalParameterWarnings(line2)`: Detects unusual orbital parameters
 - `checkDragAndEphemerisWarnings(line1)`: Detects unusual drag coefficients and ephemeris types
+
+### Edge Case Handling Functions
+
+- `normalizeLineEndings(input)`: Normalizes CRLF, LF, and CR line endings to LF
+- `parseTLELines(tleString)`: Parses TLE string into lines with robust whitespace handling
+
+## Edge Case Handling
+
+The parser automatically handles various edge cases and malformed input to ensure reliable parsing across different platforms and data sources:
+
+### Line Ending Normalization
+
+The parser automatically handles different line ending conventions:
+
+```javascript
+// Windows-style (CRLF)
+const windowsTLE = '1 25544U...\r\n2 25544...';
+parseTLE(windowsTLE); // ✓ Works
+
+// Unix-style (LF)
+const unixTLE = '1 25544U...\n2 25544...';
+parseTLE(unixTLE); // ✓ Works
+
+// Old Mac-style (CR)
+const macTLE = '1 25544U...\r2 25544...';
+parseTLE(macTLE); // ✓ Works
+
+// Mixed line endings
+const mixedTLE = 'ISS\r\n1 25544U...\n2 25544...';
+parseTLE(mixedTLE); // ✓ Works
+```
+
+### Whitespace Handling
+
+The parser handles various whitespace edge cases:
+
+```javascript
+// Leading/trailing whitespace
+const withSpaces = '   \n  1 25544U...  \n  2 25544...   \n   ';
+parseTLE(withSpaces); // ✓ Works - whitespace is trimmed
+
+// Multiple empty lines
+const emptyLines = '\n\n\n1 25544U...\n\n\n2 25544...\n\n\n';
+parseTLE(emptyLines); // ✓ Works - empty lines are filtered
+
+// Tabs in input
+const withTabs = '\t1 25544U...\t\n\t2 25544...\t';
+parseTLE(withTabs); // ✓ Works - tabs are converted to spaces and trimmed
+
+// Whitespace-only lines
+const messyInput = 'ISS\n  \t  \n1 25544U...\n\t\t\n2 25544...';
+parseTLE(messyInput); // ✓ Works - whitespace-only lines are filtered
+```
+
+### Unicode Support
+
+The parser supports Unicode characters in satellite names:
+
+```javascript
+const unicodeTLE = `СПУТНИК-1 🛰️
+1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+
+const result = parseTLE(unicodeTLE);
+console.log(result.satelliteName); // 'СПУТНИК-1 🛰️'
+```
+
+### Complex Scenarios
+
+The parser can handle combinations of edge cases:
+
+```javascript
+// Complex whitespace with mixed line endings, tabs, and empty lines
+const complexInput = '\t  \r\n\r\n  ISS  \t\r\n\r1 25544U...  \t\r\n\n\r2 25544...\t  \n\r\n';
+parseTLE(complexInput); // ✓ Works - all edge cases handled automatically
+```
 
 ## Validation Rules
 
@@ -278,13 +449,16 @@ Run the comprehensive test suite:
 npm test
 ```
 
-The test suite includes 100 test cases covering:
+The test suite includes 111 test cases covering:
 - Valid TLE parsing (2-line and 3-line formats)
 - Checksum calculation and validation
 - Invalid input handling
 - Field range validation
 - Deprecation and unusual value warnings
-- Edge cases and error conditions
+- Line ending variations (CRLF, LF, CR, mixed)
+- Whitespace handling (tabs, empty lines, excessive whitespace)
+- Unicode support
+- Complex edge cases and error conditions
 - Structured error reporting
 
 ## TLE Format Reference
