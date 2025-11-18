@@ -191,10 +191,13 @@ The parser implements comprehensive validation according to TLE format specifica
 - Line numbers: Line 1 must start with '1', Line 2 with '2'
 
 ### Checksum Validation
+- **Both Line 1 and Line 2 checksums are validated**
 - Calculated by summing all digits (0-9) in the line
 - Minus signs (-) count as 1
 - All other characters are ignored
 - Result is modulo 10
+- The last character (position 69) of each line contains the checksum
+- Validation compares the calculated checksum with the provided checksum
 
 ### Field Validation
 - **Classification**: Must be U (Unclassified), C (Classified), or S (Secret)
