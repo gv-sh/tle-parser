@@ -31,10 +31,10 @@ TLE parsers serve critical functions across multiple domains:
 - [x] Implement proper error handling with descriptive error messages
 - [x] Add support for 3-line TLE format (satellite name + 2 TLE lines)
 - [ ] Handle edge cases (whitespace variations, malformed data)
-- [ ] Implement strict mode vs permissive mode parsing
+- [x] Implement strict mode vs permissive mode parsing
 - [ ] Add line ending normalization (CRLF, LF, CR)
-- [ ] Validate field ranges according to TLE specification
-- [ ] Add warnings for deprecated or unusual values
+- [x] Validate field ranges according to TLE specification
+- [x] Add warnings for deprecated or unusual values
 - [ ] Implement parser state machine for better error recovery
 - [ ] Add support for parsing TLE metadata comments
 

@@ -5,12 +5,14 @@ A robust parser for TLE (Two-Line Element) satellite data with comprehensive inp
 ## Features
 
 - Parse TLE data with or without satellite name (2 or 3 line format)
+- **Strict and Permissive parsing modes** for handling imperfect data
 - Comprehensive format validation
 - NORAD checksum verification
 - Field range validation
 - Satellite number consistency checking
 - Classification validation
 - Flexible validation options
+- Detailed error and warning reporting
 
 ## Installation
 
@@ -67,6 +69,43 @@ console.log(result.satelliteName); // 'ISS (ZARYA)'
 const result = parseTLE(tleData, { validate: false });
 ```
 
+### Parsing Modes: Strict vs Permissive
+
+```javascript
+// Strict mode (default): Any validation error throws an exception
+const result1 = parseTLE(tleData, { mode: 'strict' });
+
+// Permissive mode: Parses imperfect data, collects non-critical errors as warnings
+const result2 = parseTLE(tleData, { mode: 'permissive' });
+console.log(result2.warnings); // Array of data quality issues
+
+// Permissive mode example with invalid checksum
+const imperfectTLE = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9995
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+
+try {
+    // In permissive mode, this succeeds with warnings
+    const result = parseTLE(imperfectTLE, { mode: 'permissive' });
+    console.log('Parsed successfully!');
+    console.log('Warnings:', result.warnings); // Contains checksum warning
+} catch (error) {
+    // Won't reach here for non-critical errors in permissive mode
+}
+```
+
+**Mode Behavior:**
+
+- **Strict Mode (default)**:
+  - Any validation error throws immediately
+  - Best for applications requiring perfect TLE data
+
+- **Permissive Mode**:
+  - Runs all validations but only throws on critical structural errors
+  - Non-critical errors (checksums, satellite number mismatch, range violations, invalid classification) become warnings
+  - Critical errors (invalid line count, line length, line numbers) still throw
+  - Returns parsed data with `warnings` array
+  - Best for working with imperfect or historical TLE data
+
 ### Custom Validation Options
 
 ```javascript
@@ -82,6 +121,12 @@ const result2 = parseTLE(tleData, {
     validate: true,
     strictChecksums: true,
     validateRanges: false     // Skip range checking
+});
+
+// Combine mode with other options
+const result3 = parseTLE(tleData, {
+    mode: 'permissive',      // Use permissive mode
+    validateRanges: false    // Disable range checking
 });
 ```
 
@@ -130,12 +175,18 @@ Parses TLE data and returns an object with all fields.
 - `tleString` (string): The TLE data (2 or 3 lines)
 - `options` (object, optional):
   - `validate` (boolean, default: `true`): Enable/disable validation
+  - `mode` (string, default: `'strict'`): Parsing mode - `'strict'` or `'permissive'`
   - `strictChecksums` (boolean, default: `true`): Enforce checksum validation
   - `validateRanges` (boolean, default: `true`): Validate field value ranges
+  - `includeWarnings` (boolean, default: `true`): Include warnings in result
 
-**Returns:** Object with parsed TLE fields
+**Returns:** Object with parsed TLE fields and optional `warnings` array
 
 **Throws:** Error if validation fails and `validate` is `true`
+
+**Mode Details:**
+- `'strict'`: Any validation error throws an exception (default behavior)
+- `'permissive'`: Only critical structural errors throw; non-critical errors become warnings
 
 ### `validateTLE(tleString, options)`
 
@@ -144,6 +195,7 @@ Validates TLE format compliance without parsing.
 **Parameters:**
 - `tleString` (string): The TLE data
 - `options` (object, optional):
+  - `mode` (string, default: `'strict'`): Validation mode - `'strict'` or `'permissive'`
   - `strictChecksums` (boolean, default: `true`)
   - `validateRanges` (boolean, default: `true`)
 
@@ -151,6 +203,10 @@ Validates TLE format compliance without parsing.
 - `isValid` (boolean): Overall validation result
 - `errors` (array): List of validation errors
 - `warnings` (array): List of validation warnings
+
+**Mode Details:**
+- `'strict'`: Errors include all validation failures
+- `'permissive'`: Only critical errors in `errors` array; non-critical issues in `warnings` array
 
 ### `calculateChecksum(line)`
 

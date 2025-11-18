@@ -466,6 +466,160 @@ try {
     assert(false, 'Valid 3-line Hubble TLE should not throw: ' + e.message);
 }
 
+// Test 42: Strict mode with invalid checksum (should throw)
+console.log('\nTest 42: Strict mode with invalid checksum throws error');
+const invalidChecksumStrictTLE = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9995
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    parseTLE(invalidChecksumStrictTLE, { mode: 'strict' });
+    assert(false, 'Strict mode with invalid checksum should throw');
+} catch (e) {
+    assert(e instanceof TLEValidationError, 'Strict mode throws TLEValidationError for checksum errors');
+}
+
+// Test 43: Permissive mode with invalid checksum (should parse with warnings)
+console.log('\nTest 43: Permissive mode with invalid checksum parses successfully');
+try {
+    const result = parseTLE(invalidChecksumStrictTLE, { mode: 'permissive' });
+    assert(result !== null, 'Permissive mode parses TLE with invalid checksum');
+    assert(result.warnings !== undefined && result.warnings.length > 0, 'Permissive mode includes warnings for checksum errors');
+    const hasChecksumWarning = result.warnings.some(w => w.code === ERROR_CODES.CHECKSUM_MISMATCH);
+    assert(hasChecksumWarning, 'Warning includes checksum mismatch error');
+} catch (e) {
+    assert(false, 'Permissive mode should not throw for checksum errors: ' + e.message);
+}
+
+// Test 44: Permissive mode with satellite number mismatch
+console.log('\nTest 44: Permissive mode with satellite number mismatch');
+const satMismatchTLE = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25545  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(satMismatchTLE, { mode: 'permissive' });
+    assert(result !== null, 'Permissive mode parses TLE with satellite number mismatch');
+    assert(result.warnings !== undefined && result.warnings.length > 0, 'Permissive mode includes warnings');
+    const hasSatNumWarning = result.warnings.some(w => w.code === ERROR_CODES.SATELLITE_NUMBER_MISMATCH);
+    assert(hasSatNumWarning, 'Warning includes satellite number mismatch');
+    assertEquals(result.satelliteNumber1, '25544', 'Satellite number from line 1 is extracted');
+} catch (e) {
+    assert(false, 'Permissive mode should not throw for satellite number mismatch: ' + e.message);
+}
+
+// Test 45: Strict mode with satellite number mismatch (should throw)
+console.log('\nTest 45: Strict mode with satellite number mismatch throws error');
+try {
+    parseTLE(satMismatchTLE, { mode: 'strict' });
+    assert(false, 'Strict mode should throw for satellite number mismatch');
+} catch (e) {
+    assert(e instanceof TLEValidationError, 'Strict mode throws TLEValidationError for satellite number mismatch');
+}
+
+// Test 46: Permissive mode with invalid classification
+console.log('\nTest 46: Permissive mode with invalid classification');
+const invalidClassPermissiveTLE = `1 25544X 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(invalidClassPermissiveTLE, { mode: 'permissive' });
+    assert(result !== null, 'Permissive mode parses TLE with invalid classification');
+    assert(result.warnings !== undefined && result.warnings.length > 0, 'Permissive mode includes warnings');
+    const hasClassWarning = result.warnings.some(w => w.code === ERROR_CODES.INVALID_CLASSIFICATION);
+    assert(hasClassWarning, 'Warning includes invalid classification');
+} catch (e) {
+    assert(false, 'Permissive mode should not throw for invalid classification: ' + e.message);
+}
+
+// Test 47: Permissive mode with out-of-range inclination
+console.log('\nTest 47: Permissive mode with out-of-range inclination');
+const badInclinationPermissiveTLE = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544 251.6453  57.0843 0001671  64.9808  73.0513 15.49338189252426`;
+try {
+    const result = parseTLE(badInclinationPermissiveTLE, { mode: 'permissive' });
+    assert(result !== null, 'Permissive mode parses TLE with out-of-range inclination');
+    assert(result.warnings !== undefined && result.warnings.length > 0, 'Permissive mode includes warnings');
+    const hasRangeWarning = result.warnings.some(w => w.code === ERROR_CODES.VALUE_OUT_OF_RANGE && w.field === 'Inclination');
+    assert(hasRangeWarning, 'Warning includes inclination out of range');
+} catch (e) {
+    assert(false, 'Permissive mode should not throw for out-of-range inclination: ' + e.message);
+}
+
+// Test 48: Permissive mode still throws for critical errors (invalid line length)
+console.log('\nTest 48: Permissive mode still throws for critical errors (invalid line length)');
+const shortLineTLE = `1 25544U 98067A
+2 25544  51.6453`;
+try {
+    parseTLE(shortLineTLE, { mode: 'permissive' });
+    assert(false, 'Permissive mode should throw for critical line length errors');
+} catch (e) {
+    assert(e instanceof TLEValidationError, 'Permissive mode throws TLEValidationError for critical errors');
+}
+
+// Test 49: Permissive mode still throws for critical errors (invalid line count)
+console.log('\nTest 49: Permissive mode still throws for critical errors (invalid line count)');
+const oneLineTLE = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996`;
+try {
+    parseTLE(oneLineTLE, { mode: 'permissive' });
+    assert(false, 'Permissive mode should throw for invalid line count');
+} catch (e) {
+    assert(e instanceof TLEValidationError, 'Permissive mode throws TLEValidationError for invalid line count');
+}
+
+// Test 50: Invalid mode parameter
+console.log('\nTest 50: Invalid mode parameter throws TypeError');
+try {
+    parseTLE(validTLE, { mode: 'invalid' });
+    assert(false, 'Invalid mode parameter should throw TypeError');
+} catch (e) {
+    assert(e instanceof TypeError, 'Invalid mode throws TypeError');
+    assert(e.message.includes('strict') && e.message.includes('permissive'), 'Error message mentions valid modes');
+}
+
+// Test 51: validateTLE with permissive mode returns warnings
+console.log('\nTest 51: validateTLE with permissive mode returns warnings');
+const permissiveValidation = validateTLE(invalidChecksumStrictTLE, { mode: 'permissive' });
+assert(permissiveValidation.isValid, 'Permissive mode validation reports valid for non-critical errors');
+assert(permissiveValidation.warnings.length > 0, 'Validation includes warnings');
+assert(permissiveValidation.errors.length === 0, 'Validation has no errors in permissive mode for non-critical issues');
+
+// Test 52: validateTLE with strict mode returns errors
+console.log('\nTest 52: validateTLE with strict mode returns errors');
+const strictModeValidation = validateTLE(invalidChecksumStrictTLE, { mode: 'strict' });
+assert(!strictModeValidation.isValid, 'Strict mode validation reports invalid for checksum errors');
+assert(strictModeValidation.errors.length > 0, 'Validation includes errors');
+
+// Test 53: Permissive mode with multiple errors
+console.log('\nTest 53: Permissive mode with multiple non-critical errors');
+const multipleErrorsTLE = `1 25544X 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9995
+2 25545 251.6453  57.0843 0001671  64.9808  73.0513 15.49338189252429`;
+try {
+    const result = parseTLE(multipleErrorsTLE, { mode: 'permissive' });
+    assert(result !== null, 'Permissive mode parses TLE with multiple errors');
+    assert(result.warnings !== undefined && result.warnings.length >= 4, 'Multiple warnings collected (checksums, sat num, classification, range)');
+} catch (e) {
+    assert(false, 'Permissive mode should not throw for multiple non-critical errors: ' + e.message);
+}
+
+// Test 54: Strict mode is default
+console.log('\nTest 54: Strict mode is default when mode not specified');
+try {
+    parseTLE(invalidChecksumStrictTLE);
+    assert(false, 'Default mode should be strict and throw for checksum errors');
+} catch (e) {
+    assert(e instanceof TLEValidationError, 'Default mode (strict) throws for validation errors');
+}
+
+// Test 55: Permissive mode with out-of-range epoch day
+console.log('\nTest 55: Permissive mode with out-of-range epoch day');
+const badEpochPermissiveTLE = `1 25544U 98067A   20400.83097691  .00001534  00000-0  35580-4 0  9997
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252429`;
+try {
+    const result = parseTLE(badEpochPermissiveTLE, { mode: 'permissive' });
+    assert(result !== null, 'Permissive mode parses TLE with out-of-range epoch day');
+    assert(result.warnings !== undefined && result.warnings.length > 0, 'Permissive mode includes warnings');
+    const hasEpochWarning = result.warnings.some(w => w.code === ERROR_CODES.VALUE_OUT_OF_RANGE && w.field === 'Epoch Day');
+    assert(hasEpochWarning, 'Warning includes epoch day out of range');
+} catch (e) {
+    assert(false, 'Permissive mode should not throw for out-of-range epoch day: ' + e.message);
+}
+
 console.log('\n=== Test Summary ===');
 console.log(`Total Tests: ${testsPassed + testsFailed}`);
 console.log(`Passed: ${testsPassed}`);
