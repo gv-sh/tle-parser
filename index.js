@@ -61,6 +61,39 @@ class TLEFormatError extends Error {
 }
 
 /**
+ * Normalize line endings in TLE string to handle CRLF, LF, and CR variations
+ * @param {string} input - The input string with potentially mixed line endings
+ * @returns {string} - String with normalized line endings (LF only)
+ */
+function normalizeLineEndings(input) {
+    // Replace CRLF with LF, then replace any remaining CR with LF
+    return input.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+}
+
+/**
+ * Parse and normalize TLE lines, handling various whitespace edge cases
+ * @param {string} tleString - The raw TLE string
+ * @returns {Array<string>} - Array of cleaned TLE lines
+ */
+function parseTLELines(tleString) {
+    // First normalize line endings
+    const normalized = normalizeLineEndings(tleString);
+
+    // Split into lines, trim each line, and filter out empty lines
+    const lines = normalized
+        .split('\n')
+        .map(line => {
+            // Replace tabs with spaces for consistency
+            // This handles cases where tabs might be in the input
+            const spacedLine = line.replace(/\t/g, ' ');
+            return spacedLine.trim();
+        })
+        .filter(line => line.length > 0);
+
+    return lines;
+}
+
+/**
  * Calculate the checksum for a TLE line according to NORAD specification
  * @param {string} line - The TLE line to calculate checksum for
  * @returns {number} - The calculated checksum (0-9)
@@ -329,8 +362,8 @@ function validateTLE(tleString, options = {}) {
     const errors = [];
     const warnings = [];
 
-    // Parse lines
-    const tleLines = tleString.trim().split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    // Parse lines with robust whitespace and line ending handling
+    const tleLines = parseTLELines(tleString);
 
     // Check number of lines (can be 2 or 3, where line 0 is satellite name)
     if (tleLines.length < 2) {
@@ -535,7 +568,8 @@ function parseTLE(tleString, options = {}) {
         validationWarnings = validation.warnings;
     }
 
-    const tleLines = tleString.trim().split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    // Parse lines with robust whitespace and line ending handling
+    const tleLines = parseTLELines(tleString);
 
     // Determine line indices
     let line1Index = 0;
@@ -585,6 +619,8 @@ module.exports = {
     validateSatelliteNumber,
     validateClassification,
     validateNumericRange,
+    normalizeLineEndings,
+    parseTLELines,
     TLEValidationError,
     TLEFormatError,
     ERROR_CODES
