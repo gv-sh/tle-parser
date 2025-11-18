@@ -157,6 +157,7 @@ function validateNumericRange(value, fieldName, min, max) {
 
 /**
  * Validate TLE format compliance with comprehensive checks
+ * Validates checksums for BOTH Line 1 and Line 2
  * @param {string} tleString - The TLE data string
  * @param {object} options - Validation options {strictChecksums: boolean, validateRanges: boolean}
  * @returns {object} - Validation result with detailed errors

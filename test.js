@@ -224,6 +224,53 @@ console.log('\nTest 20: Validate eccentricity range');
 const eccResult = validateNumericRange('0.0001671', 'Eccentricity', 0, 1);
 assert(eccResult.isValid, 'Valid eccentricity passes');
 
+// Test 21: Line 1 checksum verification
+console.log('\nTest 21: Line 1 invalid checksum detected');
+const line1InvalidChecksum = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9997
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    parseTLE(line1InvalidChecksum);
+    assert(false, 'Line 1 invalid checksum should throw error');
+} catch (e) {
+    assert(e.message.includes('Line 1') && e.message.includes('Checksum'), 'Line 1 checksum error detected');
+}
+
+// Test 22: Line 2 checksum verification
+console.log('\nTest 22: Line 2 invalid checksum detected');
+const line2InvalidChecksum = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252429`;
+try {
+    parseTLE(line2InvalidChecksum);
+    assert(false, 'Line 2 invalid checksum should throw error');
+} catch (e) {
+    assert(e.message.includes('Line 2') && e.message.includes('Checksum'), 'Line 2 checksum error detected');
+}
+
+// Test 23: Both lines invalid checksums
+console.log('\nTest 23: Both lines with invalid checksums');
+const bothInvalidChecksums = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9990
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252420`;
+try {
+    parseTLE(bothInvalidChecksums);
+    assert(false, 'Both invalid checksums should throw error');
+} catch (e) {
+    assert(e.message.includes('Line 1') || e.message.includes('Line 2'), 'At least one checksum error detected');
+}
+
+// Test 24: Verify calculateChecksum for line 2
+console.log('\nTest 24: Calculate checksum for line 2');
+const line2 = '2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428';
+const checksum2 = calculateChecksum(line2);
+assertEquals(checksum2, 8, 'Correct checksum calculated for line 2');
+
+// Test 25: Validate both lines checksums explicitly
+console.log('\nTest 25: Validate both lines checksums explicitly');
+const validLine1 = '1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996';
+const validLine2 = '2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428';
+const line1Check = validateChecksum(validLine1);
+const line2Check = validateChecksum(validLine2);
+assert(line1Check.isValid && line2Check.isValid, 'Both line checksums validate correctly');
+
 console.log('\n=== Test Summary ===');
 console.log(`Total Tests: ${testsPassed + testsFailed}`);
 console.log(`Passed: ${testsPassed}`);
