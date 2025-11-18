@@ -5,6 +5,7 @@ A robust parser for TLE (Two-Line Element) satellite data with comprehensive inp
 ## Features
 
 - Parse TLE data with or without satellite name (2 or 3 line format)
+- Support for metadata comments (lines starting with `#`)
 - Comprehensive format validation
 - NORAD checksum verification
 - Field range validation
@@ -58,6 +59,31 @@ const tleDataWithName = `ISS (ZARYA)
 
 const result = parseTLE(tleDataWithName);
 console.log(result.satelliteName); // 'ISS (ZARYA)'
+```
+
+### Parsing with Comments
+
+TLE data files often include metadata comments (lines starting with `#`). The parser automatically extracts and includes these comments in the result.
+
+```javascript
+const tleWithComments = `# Source: CelesTrak
+# Downloaded: 2023-10-27 12:34:56 UTC
+# Reference Frame: TEME
+ISS (ZARYA)
+1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+
+const result = parseTLE(tleWithComments);
+console.log(result.comments);
+// [
+//   '# Source: CelesTrak',
+//   '# Downloaded: 2023-10-27 12:34:56 UTC',
+//   '# Reference Frame: TEME'
+// ]
+
+// Exclude comments from the result
+const resultWithoutComments = parseTLE(tleWithComments, { includeComments: false });
+console.log(resultWithoutComments.comments); // undefined
 ```
 
 ### Parsing Without Validation
@@ -127,13 +153,15 @@ console.log('Actual:', result.actual);
 Parses TLE data and returns an object with all fields.
 
 **Parameters:**
-- `tleString` (string): The TLE data (2 or 3 lines)
+- `tleString` (string): The TLE data (2 or 3 lines, optionally with comment lines)
 - `options` (object, optional):
   - `validate` (boolean, default: `true`): Enable/disable validation
   - `strictChecksums` (boolean, default: `true`): Enforce checksum validation
   - `validateRanges` (boolean, default: `true`): Validate field value ranges
+  - `includeWarnings` (boolean, default: `true`): Include validation warnings in result
+  - `includeComments` (boolean, default: `true`): Include comment lines in result
 
-**Returns:** Object with parsed TLE fields
+**Returns:** Object with parsed TLE fields, and optionally `warnings` and `comments` arrays
 
 **Throws:** Error if validation fails and `validate` is `true`
 
@@ -185,8 +213,13 @@ Validates the checksum of a TLE line.
 
 The parser implements comprehensive validation according to TLE format specifications:
 
+### Comment Handling
+- Comment lines start with `#` and are automatically filtered during validation
+- Comments do not count toward the 2 or 3 line requirement
+- Comments can appear anywhere in the TLE data (before, between, or after TLE lines)
+
 ### Structural Validation
-- Line count: Must be 2 or 3 lines (3 if satellite name included)
+- Line count: Must be 2 or 3 lines (3 if satellite name included), excluding comment lines
 - Line length: Each data line must be exactly 69 characters
 - Line numbers: Line 1 must start with '1', Line 2 with '2'
 
@@ -219,23 +252,33 @@ Run the comprehensive test suite:
 npm test
 ```
 
-The test suite includes 20+ test cases covering:
-- Valid TLE parsing
+The test suite includes 50+ test cases covering:
+- Valid TLE parsing (2-line and 3-line formats)
+- Comment parsing and handling
 - Checksum calculation and validation
 - Invalid input handling
 - Field range validation
 - Edge cases and error conditions
+- Option handling (includeComments, includeWarnings, etc.)
 
 ## TLE Format Reference
 
 TLE (Two-Line Element Set) format is a data format used to convey orbital elements of Earth-orbiting objects. It was designed for use with NORAD's SGP4/SDP4 propagation models.
 
-Example TLE:
+Example TLE with metadata comments:
 ```
+# Source: CelesTrak
+# Epoch: 2020-10-26 19:56:36 UTC
 ISS (ZARYA)
 1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
 2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428
 ```
+
+**Format components:**
+- **Comment lines** (optional): Lines starting with `#` containing metadata
+- **Line 0** (optional): Satellite name (up to 24 characters recommended)
+- **Line 1**: Catalog number, epoch, ballistic coefficients
+- **Line 2**: Orbital elements (inclination, RAAN, eccentricity, etc.)
 
 For more information about the TLE format, see:
 - [CelesTrak TLE Format FAQ](https://celestrak.org/columns/v04n03/)
