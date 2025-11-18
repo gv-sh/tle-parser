@@ -27,7 +27,7 @@ TLE parsers serve critical functions across multiple domains:
 
 - [x] Implement comprehensive input validation for TLE format compliance
 - [x] Add checksum verification for both TLE lines
-- [ ] Validate line numbers and satellite number consistency
+- [x] Validate line numbers and satellite number consistency
 - [ ] Implement proper error handling with descriptive error messages
 - [ ] Add support for 3-line TLE format (satellite name + 2 TLE lines)
 - [ ] Handle edge cases (whitespace variations, malformed data)
