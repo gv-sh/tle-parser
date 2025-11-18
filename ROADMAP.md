@@ -33,9 +33,9 @@ TLE parsers serve critical functions across multiple domains:
 - [ ] Handle edge cases (whitespace variations, malformed data)
 - [ ] Implement strict mode vs permissive mode parsing
 - [ ] Add line ending normalization (CRLF, LF, CR)
-- [ ] Validate field ranges according to TLE specification
-- [ ] Add warnings for deprecated or unusual values
-- [ ] Implement parser state machine for better error recovery
+- [x] Validate field ranges according to TLE specification
+- [x] Add warnings for deprecated or unusual values
+- [x] Implement parser state machine for better error recovery
 - [ ] Add support for parsing TLE metadata comments
 
 ### Testing Infrastructure
