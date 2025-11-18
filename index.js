@@ -332,7 +332,7 @@ function validateNumericRange(value, fieldName, min, max) {
  * Validate TLE format compliance with comprehensive checks
  * Validates checksums for BOTH Line 1 and Line 2
  * @param {string} tleString - The TLE data string
- * @param {object} options - Validation options {strictChecksums: boolean, validateRanges: boolean}
+ * @param {object} options - Validation options {strictChecksums: boolean, validateRanges: boolean, mode: 'strict'|'permissive'}
  * @returns {object} - Validation result with detailed structured errors and warnings
  * @throws {TypeError} - If input types are invalid
  */
@@ -356,8 +356,14 @@ function validateTLE(tleString, options = {}) {
 
     const {
         strictChecksums = true,
-        validateRanges = true
+        validateRanges = true,
+        mode = 'strict'
     } = options;
+
+    // Validate mode parameter
+    if (mode !== 'strict' && mode !== 'permissive') {
+        throw new TypeError('Mode must be either "strict" or "permissive"');
+    }
 
     const errors = [];
     const warnings = [];
@@ -428,30 +434,70 @@ function validateTLE(tleString, options = {}) {
     // Validate line structures
     const line1Result = validateLineStructure(line1, 1);
     if (!line1Result.isValid) {
-        errors.push(...line1Result.errors);
-        if (strictChecksums) {
-            return { isValid: false, errors, warnings };
+        // In permissive mode, checksum errors become warnings
+        if (mode === 'permissive') {
+            const criticalErrors = line1Result.errors.filter(e => e.code !== ERROR_CODES.CHECKSUM_MISMATCH && e.code !== ERROR_CODES.INVALID_CHECKSUM_CHARACTER);
+            const checksumErrors = line1Result.errors.filter(e => e.code === ERROR_CODES.CHECKSUM_MISMATCH || e.code === ERROR_CODES.INVALID_CHECKSUM_CHARACTER);
+
+            errors.push(...criticalErrors);
+            warnings.push(...checksumErrors.map(e => ({ ...e, severity: 'warning' })));
+
+            // Only return early for critical errors in permissive mode
+            if (criticalErrors.length > 0) {
+                return { isValid: false, errors, warnings };
+            }
+        } else {
+            // Strict mode: all errors are critical
+            errors.push(...line1Result.errors);
+            if (strictChecksums) {
+                return { isValid: false, errors, warnings };
+            }
         }
     }
 
     const line2Result = validateLineStructure(line2, 2);
     if (!line2Result.isValid) {
-        errors.push(...line2Result.errors);
-        if (strictChecksums) {
-            return { isValid: false, errors, warnings };
+        // In permissive mode, checksum errors become warnings
+        if (mode === 'permissive') {
+            const criticalErrors = line2Result.errors.filter(e => e.code !== ERROR_CODES.CHECKSUM_MISMATCH && e.code !== ERROR_CODES.INVALID_CHECKSUM_CHARACTER);
+            const checksumErrors = line2Result.errors.filter(e => e.code === ERROR_CODES.CHECKSUM_MISMATCH || e.code === ERROR_CODES.INVALID_CHECKSUM_CHARACTER);
+
+            errors.push(...criticalErrors);
+            warnings.push(...checksumErrors.map(e => ({ ...e, severity: 'warning' })));
+
+            // Only return early for critical errors in permissive mode
+            if (criticalErrors.length > 0) {
+                return { isValid: false, errors, warnings };
+            }
+        } else {
+            // Strict mode: all errors are critical
+            errors.push(...line2Result.errors);
+            if (strictChecksums) {
+                return { isValid: false, errors, warnings };
+            }
         }
     }
 
     // Validate satellite number consistency
     const satNumResult = validateSatelliteNumber(line1, line2);
     if (!satNumResult.isValid) {
-        errors.push(satNumResult.error);
+        if (mode === 'permissive') {
+            // In permissive mode, satellite number mismatch is a warning
+            warnings.push({ ...satNumResult.error, severity: 'warning' });
+        } else {
+            errors.push(satNumResult.error);
+        }
     }
 
     // Validate classification
     const classResult = validateClassification(line1);
     if (!classResult.isValid) {
-        errors.push(classResult.error);
+        if (mode === 'permissive') {
+            // In permissive mode, invalid classification is a warning
+            warnings.push({ ...classResult.error, severity: 'warning' });
+        } else {
+            errors.push(classResult.error);
+        }
     }
 
     // Validate ranges if requested
@@ -460,35 +506,55 @@ function validateTLE(tleString, options = {}) {
         const inclination = line2.substring(8, 16).trim();
         const incResult = validateNumericRange(inclination, 'Inclination', 0, 180);
         if (!incResult.isValid) {
-            errors.push(incResult.error);
+            if (mode === 'permissive') {
+                warnings.push({ ...incResult.error, severity: 'warning' });
+            } else {
+                errors.push(incResult.error);
+            }
         }
 
         // Right Ascension (0-360 degrees)
         const rightAscension = line2.substring(17, 25).trim();
         const raResult = validateNumericRange(rightAscension, 'Right Ascension', 0, 360);
         if (!raResult.isValid) {
-            errors.push(raResult.error);
+            if (mode === 'permissive') {
+                warnings.push({ ...raResult.error, severity: 'warning' });
+            } else {
+                errors.push(raResult.error);
+            }
         }
 
         // Eccentricity (0-1, stored as decimal without leading 0.)
         const eccentricity = '0.' + line2.substring(26, 33).trim();
         const eccResult = validateNumericRange(eccentricity, 'Eccentricity', 0, 1);
         if (!eccResult.isValid) {
-            errors.push(eccResult.error);
+            if (mode === 'permissive') {
+                warnings.push({ ...eccResult.error, severity: 'warning' });
+            } else {
+                errors.push(eccResult.error);
+            }
         }
 
         // Argument of Perigee (0-360 degrees)
         const argPerigee = line2.substring(34, 42).trim();
         const apResult = validateNumericRange(argPerigee, 'Argument of Perigee', 0, 360);
         if (!apResult.isValid) {
-            errors.push(apResult.error);
+            if (mode === 'permissive') {
+                warnings.push({ ...apResult.error, severity: 'warning' });
+            } else {
+                errors.push(apResult.error);
+            }
         }
 
         // Mean Anomaly (0-360 degrees)
         const meanAnomaly = line2.substring(43, 51).trim();
         const maResult = validateNumericRange(meanAnomaly, 'Mean Anomaly', 0, 360);
         if (!maResult.isValid) {
-            errors.push(maResult.error);
+            if (mode === 'permissive') {
+                warnings.push({ ...maResult.error, severity: 'warning' });
+            } else {
+                errors.push(maResult.error);
+            }
         }
 
         // Mean Motion (revolutions per day, typically 0-20)
@@ -506,14 +572,22 @@ function validateTLE(tleString, options = {}) {
         const epochYear = line1.substring(18, 20).trim();
         const eyResult = validateNumericRange(epochYear, 'Epoch Year', 0, 99);
         if (!eyResult.isValid) {
-            errors.push(eyResult.error);
+            if (mode === 'permissive') {
+                warnings.push({ ...eyResult.error, severity: 'warning' });
+            } else {
+                errors.push(eyResult.error);
+            }
         }
 
         // Epoch Day (1-366.99999999)
         const epochDay = line1.substring(20, 32).trim();
         const edResult = validateNumericRange(epochDay, 'Epoch Day', 1, 366.99999999);
         if (!edResult.isValid) {
-            errors.push(edResult.error);
+            if (mode === 'permissive') {
+                warnings.push({ ...edResult.error, severity: 'warning' });
+            } else {
+                errors.push(edResult.error);
+            }
         }
     }
 
@@ -527,7 +601,7 @@ function validateTLE(tleString, options = {}) {
 /**
  * Parse TLE data with optional validation
  * @param {string} tleString - The TLE data string
- * @param {object} options - Parsing options {validate: boolean, strictChecksums: boolean, validateRanges: boolean, includeWarnings: boolean}
+ * @param {object} options - Parsing options {validate: boolean, strictChecksums: boolean, validateRanges: boolean, includeWarnings: boolean, mode: 'strict'|'permissive'}
  * @returns {object} - Parsed TLE object with optional warnings array
  * @throws {TypeError} - If input types are invalid
  * @throws {TLEValidationError} - If validation fails and validate option is true
@@ -546,13 +620,14 @@ function parseTLE(tleString, options = {}) {
         validate = true,
         strictChecksums = true,
         validateRanges = true,
-        includeWarnings = true
+        includeWarnings = true,
+        mode = 'strict'
     } = options;
 
     // Validate if requested
     let validationWarnings = [];
     if (validate) {
-        const validation = validateTLE(tleString, { strictChecksums, validateRanges });
+        const validation = validateTLE(tleString, { strictChecksums, validateRanges, mode });
         if (!validation.isValid) {
             // Create detailed error message
             const errorMessages = validation.errors.map(err =>
