@@ -61,14 +61,6 @@ class TLEFormatError extends Error {
 }
 
 /**
- * Normalize line endings to LF (\n)
- * Handles CRLF (\r\n), CR (\r), and LF (\n) line endings
- * @param {string} text - The text to normalize
- * @returns {string} - Text with normalized line endings
- */
-function normalizeLineEndings(text) {
-    // Replace CRLF (\r\n) with LF (\n), then replace any remaining CR (\r) with LF (\n)
-    return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
  * Normalize line endings in TLE string to handle CRLF, LF, and CR variations
  * @param {string} input - The input string with potentially mixed line endings
  * @returns {string} - String with normalized line endings (LF only)
@@ -513,6 +505,91 @@ function validateTLE(tleString, options = {}) {
 
     // Validate ranges if requested
     if (validateRanges && line1.length === 69 && line2.length === 69) {
+        // Satellite Number (1-99999, 5 digits)
+        const satelliteNumber = line1.substring(2, 7).trim();
+        const satNumRangeResult = validateNumericRange(satelliteNumber, 'Satellite Number', 1, 99999);
+        if (!satNumRangeResult.isValid) {
+            if (mode === 'permissive') {
+                warnings.push({ ...satNumRangeResult.error, severity: 'warning' });
+            } else {
+                errors.push(satNumRangeResult.error);
+            }
+        }
+
+        // International Designator Year (0-99)
+        const intlDesigYear = line1.substring(9, 11).trim();
+        if (intlDesigYear.length > 0) {  // Field may be blank
+            const idyResult = validateNumericRange(intlDesigYear, 'International Designator Year', 0, 99);
+            if (!idyResult.isValid) {
+                if (mode === 'permissive') {
+                    warnings.push({ ...idyResult.error, severity: 'warning' });
+                } else {
+                    errors.push(idyResult.error);
+                }
+            }
+        }
+
+        // International Designator Launch Number (1-999)
+        const intlDesigLaunch = line1.substring(11, 14).trim();
+        if (intlDesigLaunch.length > 0) {  // Field may be blank
+            const idlResult = validateNumericRange(intlDesigLaunch, 'International Designator Launch Number', 1, 999);
+            if (!idlResult.isValid) {
+                if (mode === 'permissive') {
+                    warnings.push({ ...idlResult.error, severity: 'warning' });
+                } else {
+                    errors.push(idlResult.error);
+                }
+            }
+        }
+
+        // Ephemeris Type (0-9, single digit)
+        const ephemerisType = line1.substring(62, 63).trim();
+        if (ephemerisType.length > 0) {
+            const etResult = validateNumericRange(ephemerisType, 'Ephemeris Type', 0, 9);
+            if (!etResult.isValid) {
+                if (mode === 'permissive') {
+                    warnings.push({ ...etResult.error, severity: 'warning' });
+                } else {
+                    errors.push(etResult.error);
+                }
+            }
+        }
+
+        // Element Set Number (0-9999, 4 digits)
+        const elementSetNum = line1.substring(64, 68).trim();
+        if (elementSetNum.length > 0) {
+            const esnResult = validateNumericRange(elementSetNum, 'Element Set Number', 0, 9999);
+            if (!esnResult.isValid) {
+                if (mode === 'permissive') {
+                    warnings.push({ ...esnResult.error, severity: 'warning' });
+                } else {
+                    errors.push(esnResult.error);
+                }
+            }
+        }
+
+        // Epoch Year (0-99)
+        const epochYear = line1.substring(18, 20).trim();
+        const eyResult = validateNumericRange(epochYear, 'Epoch Year', 0, 99);
+        if (!eyResult.isValid) {
+            if (mode === 'permissive') {
+                warnings.push({ ...eyResult.error, severity: 'warning' });
+            } else {
+                errors.push(eyResult.error);
+            }
+        }
+
+        // Epoch Day (1-366.99999999)
+        const epochDay = line1.substring(20, 32).trim();
+        const edResult = validateNumericRange(epochDay, 'Epoch Day', 1, 366.99999999);
+        if (!edResult.isValid) {
+            if (mode === 'permissive') {
+                warnings.push({ ...edResult.error, severity: 'warning' });
+            } else {
+                errors.push(edResult.error);
+            }
+        }
+
         // Inclination (0-180 degrees)
         const inclination = line2.substring(8, 16).trim();
         const incResult = validateNumericRange(inclination, 'Inclination', 0, 180);
@@ -579,25 +656,16 @@ function validateTLE(tleString, options = {}) {
             });
         }
 
-        // Epoch Year (00-99)
-        const epochYear = line1.substring(18, 20).trim();
-        const eyResult = validateNumericRange(epochYear, 'Epoch Year', 0, 99);
-        if (!eyResult.isValid) {
-            if (mode === 'permissive') {
-                warnings.push({ ...eyResult.error, severity: 'warning' });
-            } else {
-                errors.push(eyResult.error);
-            }
-        }
-
-        // Epoch Day (1-366.99999999)
-        const epochDay = line1.substring(20, 32).trim();
-        const edResult = validateNumericRange(epochDay, 'Epoch Day', 1, 366.99999999);
-        if (!edResult.isValid) {
-            if (mode === 'permissive') {
-                warnings.push({ ...edResult.error, severity: 'warning' });
-            } else {
-                errors.push(edResult.error);
+        // Revolution Number (0-99999, 5 digits)
+        const revolutionNumber = line2.substring(63, 68).trim();
+        if (revolutionNumber.length > 0) {
+            const rnResult = validateNumericRange(revolutionNumber, 'Revolution Number', 0, 99999);
+            if (!rnResult.isValid) {
+                if (mode === 'permissive') {
+                    warnings.push({ ...rnResult.error, severity: 'warning' });
+                } else {
+                    errors.push(rnResult.error);
+                }
             }
         }
     }
@@ -708,6 +776,7 @@ module.exports = {
     validateClassification,
     validateNumericRange,
     normalizeLineEndings,
+    parseTLELines,
     TLEValidationError,
     TLEFormatError,
     ERROR_CODES
