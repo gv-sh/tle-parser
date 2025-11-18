@@ -384,6 +384,88 @@ assert(error.expected === 69, 'Error has expected value');
 assert(error.actual === 8, 'Error has actual value');
 assert(error.code === ERROR_CODES.INVALID_LINE_LENGTH, 'Error has correct code');
 
+// Test 36: 3-line TLE with satellite name starting with '1' (should produce warning)
+console.log('\nTest 36: 3-line TLE with satellite name starting with "1" produces warning');
+const nameStartsWith1 = `1KUNS-PF
+1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(nameStartsWith1);
+    assert(result.warnings !== undefined && result.warnings.length > 0, 'Satellite name starting with "1" produces warning');
+    const hasWarning = result.warnings.some(w => w.code === ERROR_CODES.SATELLITE_NAME_FORMAT_WARNING);
+    assert(hasWarning, 'Warning code is SATELLITE_NAME_FORMAT_WARNING');
+} catch (e) {
+    assert(false, 'Valid TLE with name starting with "1" should not throw: ' + e.message);
+}
+
+// Test 37: 3-line TLE with satellite name starting with '2' (should produce warning)
+console.log('\nTest 37: 3-line TLE with satellite name starting with "2" produces warning');
+const nameStartsWith2 = `2020-001A
+1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(nameStartsWith2);
+    assert(result.warnings !== undefined && result.warnings.length > 0, 'Satellite name starting with "2" produces warning');
+    const hasWarning = result.warnings.some(w => w.code === ERROR_CODES.SATELLITE_NAME_FORMAT_WARNING);
+    assert(hasWarning, 'Warning code is SATELLITE_NAME_FORMAT_WARNING');
+} catch (e) {
+    assert(false, 'Valid TLE with name starting with "2" should not throw: ' + e.message);
+}
+
+// Test 38: 3-line TLE with satellite name exactly 24 characters
+console.log('\nTest 38: 3-line TLE with satellite name exactly 24 characters (no warning)');
+const name24Chars = `EXACTLY24CHARACTERSLONG!
+1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(name24Chars);
+    assertEquals(result.satelliteName, 'EXACTLY24CHARACTERSLONG!', 'Satellite name with exactly 24 chars is extracted');
+    const hasLengthWarning = result.warnings && result.warnings.some(w => w.code === ERROR_CODES.SATELLITE_NAME_TOO_LONG);
+    assert(!hasLengthWarning, 'No length warning for 24 character name');
+} catch (e) {
+    assert(false, 'Valid TLE with 24 character name should not throw: ' + e.message);
+}
+
+// Test 39: 3-line TLE with satellite name containing special characters
+console.log('\nTest 39: 3-line TLE with satellite name containing special characters');
+const nameWithSpecialChars = `STARLINK-1234 (V1.5)
+1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(nameWithSpecialChars);
+    assert(result !== null, 'Parse TLE with special characters in name');
+    assertEquals(result.satelliteName, 'STARLINK-1234 (V1.5)', 'Special characters in satellite name preserved');
+} catch (e) {
+    assert(false, 'Valid TLE with special characters in name should not throw: ' + e.message);
+}
+
+// Test 40: 3-line TLE with short satellite name
+console.log('\nTest 40: 3-line TLE with very short satellite name');
+const shortName = `SAT
+1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(shortName);
+    assert(result !== null, 'Parse TLE with short name');
+    assertEquals(result.satelliteName, 'SAT', 'Short satellite name extracted correctly');
+} catch (e) {
+    assert(false, 'Valid TLE with short name should not throw: ' + e.message);
+}
+
+// Test 41: 3-line TLE format with multiple real satellites (Hubble)
+console.log('\nTest 41: 3-line TLE format with real satellite (Hubble Space Telescope)');
+const hubble3Line = `HST
+1 20580U 90037B   20300.40752066  .00000935  00000-0  51815-4 0  9990
+2 20580  28.4694 291.5056 0002821  87.1571 289.7311 15.09612758476361`;
+try {
+    const result = parseTLE(hubble3Line);
+    assert(result !== null, 'Parse 3-line Hubble TLE');
+    assertEquals(result.satelliteName, 'HST', 'Hubble satellite name extracted');
+    assertEquals(result.satelliteNumber1, '20580', 'Hubble satellite number correct');
+} catch (e) {
+    assert(false, 'Valid 3-line Hubble TLE should not throw: ' + e.message);
+}
+
 console.log('\n=== Test Summary ===');
 console.log(`Total Tests: ${testsPassed + testsFailed}`);
 console.log(`Passed: ${testsPassed}`);
