@@ -9,6 +9,7 @@ const {
     validateClassification,
     validateNumericRange,
     normalizeLineEndings,
+    parseTLELines,
     TLEValidationError,
     TLEFormatError,
     ERROR_CODES
@@ -493,6 +494,166 @@ assertEquals(normalizedMixed, 'line1\nline2\nline3\nline4', 'Mixed line endings 
 
 // Test 46: Parse TLE with CRLF line endings
 console.log('\nTest 46: Parse TLE with CRLF line endings');
+// Test 42: Strict mode with invalid checksum (should throw)
+console.log('\nTest 42: Strict mode with invalid checksum throws error');
+const invalidChecksumStrictTLE = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9995
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    parseTLE(invalidChecksumStrictTLE, { mode: 'strict' });
+    assert(false, 'Strict mode with invalid checksum should throw');
+} catch (e) {
+    assert(e instanceof TLEValidationError, 'Strict mode throws TLEValidationError for checksum errors');
+}
+
+// Test 43: Permissive mode with invalid checksum (should parse with warnings)
+console.log('\nTest 43: Permissive mode with invalid checksum parses successfully');
+try {
+    const result = parseTLE(invalidChecksumStrictTLE, { mode: 'permissive' });
+    assert(result !== null, 'Permissive mode parses TLE with invalid checksum');
+    assert(result.warnings !== undefined && result.warnings.length > 0, 'Permissive mode includes warnings for checksum errors');
+    const hasChecksumWarning = result.warnings.some(w => w.code === ERROR_CODES.CHECKSUM_MISMATCH);
+    assert(hasChecksumWarning, 'Warning includes checksum mismatch error');
+} catch (e) {
+    assert(false, 'Permissive mode should not throw for checksum errors: ' + e.message);
+}
+
+// Test 44: Permissive mode with satellite number mismatch
+console.log('\nTest 44: Permissive mode with satellite number mismatch');
+const satMismatchTLE = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25545  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(satMismatchTLE, { mode: 'permissive' });
+    assert(result !== null, 'Permissive mode parses TLE with satellite number mismatch');
+    assert(result.warnings !== undefined && result.warnings.length > 0, 'Permissive mode includes warnings');
+    const hasSatNumWarning = result.warnings.some(w => w.code === ERROR_CODES.SATELLITE_NUMBER_MISMATCH);
+    assert(hasSatNumWarning, 'Warning includes satellite number mismatch');
+    assertEquals(result.satelliteNumber1, '25544', 'Satellite number from line 1 is extracted');
+} catch (e) {
+    assert(false, 'Permissive mode should not throw for satellite number mismatch: ' + e.message);
+}
+
+// Test 45: Strict mode with satellite number mismatch (should throw)
+console.log('\nTest 45: Strict mode with satellite number mismatch throws error');
+try {
+    parseTLE(satMismatchTLE, { mode: 'strict' });
+    assert(false, 'Strict mode should throw for satellite number mismatch');
+} catch (e) {
+    assert(e instanceof TLEValidationError, 'Strict mode throws TLEValidationError for satellite number mismatch');
+}
+
+// Test 46: Permissive mode with invalid classification
+console.log('\nTest 46: Permissive mode with invalid classification');
+const invalidClassPermissiveTLE = `1 25544X 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(invalidClassPermissiveTLE, { mode: 'permissive' });
+    assert(result !== null, 'Permissive mode parses TLE with invalid classification');
+    assert(result.warnings !== undefined && result.warnings.length > 0, 'Permissive mode includes warnings');
+    const hasClassWarning = result.warnings.some(w => w.code === ERROR_CODES.INVALID_CLASSIFICATION);
+    assert(hasClassWarning, 'Warning includes invalid classification');
+} catch (e) {
+    assert(false, 'Permissive mode should not throw for invalid classification: ' + e.message);
+}
+
+// Test 47: Permissive mode with out-of-range inclination
+console.log('\nTest 47: Permissive mode with out-of-range inclination');
+const badInclinationPermissiveTLE = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544 251.6453  57.0843 0001671  64.9808  73.0513 15.49338189252426`;
+try {
+    const result = parseTLE(badInclinationPermissiveTLE, { mode: 'permissive' });
+    assert(result !== null, 'Permissive mode parses TLE with out-of-range inclination');
+    assert(result.warnings !== undefined && result.warnings.length > 0, 'Permissive mode includes warnings');
+    const hasRangeWarning = result.warnings.some(w => w.code === ERROR_CODES.VALUE_OUT_OF_RANGE && w.field === 'Inclination');
+    assert(hasRangeWarning, 'Warning includes inclination out of range');
+} catch (e) {
+    assert(false, 'Permissive mode should not throw for out-of-range inclination: ' + e.message);
+}
+
+// Test 48: Permissive mode still throws for critical errors (invalid line length)
+console.log('\nTest 48: Permissive mode still throws for critical errors (invalid line length)');
+const shortLineTLE = `1 25544U 98067A
+2 25544  51.6453`;
+try {
+    parseTLE(shortLineTLE, { mode: 'permissive' });
+    assert(false, 'Permissive mode should throw for critical line length errors');
+} catch (e) {
+    assert(e instanceof TLEValidationError, 'Permissive mode throws TLEValidationError for critical errors');
+}
+
+// Test 49: Permissive mode still throws for critical errors (invalid line count)
+console.log('\nTest 49: Permissive mode still throws for critical errors (invalid line count)');
+const oneLineTLE = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996`;
+try {
+    parseTLE(oneLineTLE, { mode: 'permissive' });
+    assert(false, 'Permissive mode should throw for invalid line count');
+} catch (e) {
+    assert(e instanceof TLEValidationError, 'Permissive mode throws TLEValidationError for invalid line count');
+}
+
+// Test 50: Invalid mode parameter
+console.log('\nTest 50: Invalid mode parameter throws TypeError');
+try {
+    parseTLE(validTLE, { mode: 'invalid' });
+    assert(false, 'Invalid mode parameter should throw TypeError');
+} catch (e) {
+    assert(e instanceof TypeError, 'Invalid mode throws TypeError');
+    assert(e.message.includes('strict') && e.message.includes('permissive'), 'Error message mentions valid modes');
+}
+
+// Test 51: validateTLE with permissive mode returns warnings
+console.log('\nTest 51: validateTLE with permissive mode returns warnings');
+const permissiveValidation = validateTLE(invalidChecksumStrictTLE, { mode: 'permissive' });
+assert(permissiveValidation.isValid, 'Permissive mode validation reports valid for non-critical errors');
+assert(permissiveValidation.warnings.length > 0, 'Validation includes warnings');
+assert(permissiveValidation.errors.length === 0, 'Validation has no errors in permissive mode for non-critical issues');
+
+// Test 52: validateTLE with strict mode returns errors
+console.log('\nTest 52: validateTLE with strict mode returns errors');
+const strictModeValidation = validateTLE(invalidChecksumStrictTLE, { mode: 'strict' });
+assert(!strictModeValidation.isValid, 'Strict mode validation reports invalid for checksum errors');
+assert(strictModeValidation.errors.length > 0, 'Validation includes errors');
+
+// Test 53: Permissive mode with multiple errors
+console.log('\nTest 53: Permissive mode with multiple non-critical errors');
+const multipleErrorsTLE = `1 25544X 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9995
+2 25545 251.6453  57.0843 0001671  64.9808  73.0513 15.49338189252429`;
+try {
+    const result = parseTLE(multipleErrorsTLE, { mode: 'permissive' });
+    assert(result !== null, 'Permissive mode parses TLE with multiple errors');
+    assert(result.warnings !== undefined && result.warnings.length >= 4, 'Multiple warnings collected (checksums, sat num, classification, range)');
+} catch (e) {
+    assert(false, 'Permissive mode should not throw for multiple non-critical errors: ' + e.message);
+}
+
+// Test 54: Strict mode is default
+console.log('\nTest 54: Strict mode is default when mode not specified');
+try {
+    parseTLE(invalidChecksumStrictTLE);
+    assert(false, 'Default mode should be strict and throw for checksum errors');
+} catch (e) {
+    assert(e instanceof TLEValidationError, 'Default mode (strict) throws for validation errors');
+}
+
+// Test 55: Permissive mode with out-of-range epoch day
+console.log('\nTest 55: Permissive mode with out-of-range epoch day');
+const badEpochPermissiveTLE = `1 25544U 98067A   20400.83097691  .00001534  00000-0  35580-4 0  9997
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252429`;
+try {
+    const result = parseTLE(badEpochPermissiveTLE, { mode: 'permissive' });
+    assert(result !== null, 'Permissive mode parses TLE with out-of-range epoch day');
+    assert(result.warnings !== undefined && result.warnings.length > 0, 'Permissive mode includes warnings');
+    const hasEpochWarning = result.warnings.some(w => w.code === ERROR_CODES.VALUE_OUT_OF_RANGE && w.field === 'Epoch Day');
+    assert(hasEpochWarning, 'Warning includes epoch day out of range');
+} catch (e) {
+    assert(false, 'Permissive mode should not throw for out-of-range epoch day: ' + e.message);
+// ============================================================================
+// EDGE CASE TESTS: Whitespace variations and malformed data handling
+// ============================================================================
+
+console.log('\n=== Edge Case Tests: Whitespace & Malformed Data ===');
+
+// Test 42: CRLF line endings (Windows-style)
+console.log('\nTest 42: TLE with CRLF line endings (Windows-style)');
 const tleCRLF = '1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996\r\n2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428';
 try {
     const result = parseTLE(tleCRLF);
@@ -504,6 +665,13 @@ try {
 
 // Test 47: Parse TLE with CR line endings
 console.log('\nTest 47: Parse TLE with CR line endings');
+    assertEquals(result.satelliteNumber1, '25544', 'CRLF: Correct satellite number extracted');
+} catch (e) {
+    assert(false, 'CRLF line endings should parse correctly: ' + e.message);
+}
+
+// Test 43: CR line endings (old Mac-style)
+console.log('\nTest 43: TLE with CR line endings (old Mac-style)');
 const tleCR = '1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996\r2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428';
 try {
     const result = parseTLE(tleCR);
@@ -567,6 +735,173 @@ try {
     assertEquals(result.satelliteNumber1, '25544', 'Correct satellite number with mixed line endings');
 } catch (e) {
     assert(false, 'TLE with mixed line endings should parse: ' + e.message);
+    assertEquals(result.satelliteNumber1, '25544', 'CR: Correct satellite number extracted');
+} catch (e) {
+    assert(false, 'CR line endings should parse correctly: ' + e.message);
+}
+
+// Test 44: Mixed line endings
+console.log('\nTest 44: TLE with mixed line endings (CRLF and LF)');
+const tleMixed = 'ISS (ZARYA)\r\n1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996\n2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428';
+try {
+    const result = parseTLE(tleMixed);
+    assert(result !== null, 'Parse TLE with mixed line endings');
+    assertEquals(result.satelliteName, 'ISS (ZARYA)', 'Mixed endings: Satellite name extracted');
+    assertEquals(result.satelliteNumber1, '25544', 'Mixed endings: Satellite number extracted');
+} catch (e) {
+    assert(false, 'Mixed line endings should parse correctly: ' + e.message);
+}
+
+// Test 45: Leading and trailing whitespace
+console.log('\nTest 45: TLE with excessive leading and trailing whitespace');
+const tleWhitespace = '   \n  1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996  \n  2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428   \n   ';
+try {
+    const result = parseTLE(tleWhitespace);
+    assert(result !== null, 'Parse TLE with excessive whitespace');
+    assertEquals(result.satelliteNumber1, '25544', 'Whitespace: Correct satellite number extracted');
+} catch (e) {
+    assert(false, 'Excessive whitespace should be handled: ' + e.message);
+}
+
+// Test 46: Tabs in input (leading/trailing)
+console.log('\nTest 46: TLE with tabs instead of spaces (edge case)');
+const tleTabs = '\t1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996\t\n\t2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428\t';
+try {
+    const result = parseTLE(tleTabs);
+    assert(result !== null, 'Parse TLE with tabs');
+    assertEquals(result.satelliteNumber1, '25544', 'Tabs: Correct satellite number extracted');
+} catch (e) {
+    assert(false, 'Tabs in leading/trailing position should be handled: ' + e.message);
+}
+
+// Test 47: Multiple consecutive empty lines
+console.log('\nTest 47: TLE with multiple consecutive empty lines');
+const tleEmptyLines = '\n\n\n1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996\n\n\n2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428\n\n\n';
+try {
+    const result = parseTLE(tleEmptyLines);
+    assert(result !== null, 'Parse TLE with multiple empty lines');
+    assertEquals(result.satelliteNumber1, '25544', 'Empty lines: Correct satellite number extracted');
+} catch (e) {
+    assert(false, 'Multiple empty lines should be filtered out: ' + e.message);
+}
+
+// Test 48: normalizeLineEndings function - CRLF
+console.log('\nTest 48: normalizeLineEndings function with CRLF');
+const inputCRLF = 'line1\r\nline2\r\nline3';
+const normalizedCRLF = normalizeLineEndings(inputCRLF);
+assertEquals(normalizedCRLF, 'line1\nline2\nline3', 'CRLF normalized to LF');
+
+// Test 49: normalizeLineEndings function - CR
+console.log('\nTest 49: normalizeLineEndings function with CR');
+const inputCR = 'line1\rline2\rline3';
+const normalizedCR = normalizeLineEndings(inputCR);
+assertEquals(normalizedCR, 'line1\nline2\nline3', 'CR normalized to LF');
+
+// Test 50: normalizeLineEndings function - mixed
+console.log('\nTest 50: normalizeLineEndings function with mixed endings');
+const inputMixed = 'line1\r\nline2\nline3\rline4';
+const normalizedMixed = normalizeLineEndings(inputMixed);
+assertEquals(normalizedMixed, 'line1\nline2\nline3\nline4', 'Mixed endings normalized to LF');
+
+// Test 51: parseTLELines function - basic
+console.log('\nTest 51: parseTLELines function with normal input');
+const basicInput = 'ISS\n1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996\n2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428';
+const parsedLines = parseTLELines(basicInput);
+assert(parsedLines.length === 3, 'parseTLELines returns 3 lines');
+assertEquals(parsedLines[0], 'ISS', 'First line is satellite name');
+
+// Test 52: parseTLELines function - with empty lines and whitespace
+console.log('\nTest 52: parseTLELines function filters empty lines');
+const messyInput = '\n\n  ISS  \n\n1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996\n\n\n  2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428  \n\n';
+const cleanedLines = parseTLELines(messyInput);
+assert(cleanedLines.length === 3, 'parseTLELines filters empty lines correctly');
+assertEquals(cleanedLines[0], 'ISS', 'Satellite name trimmed correctly');
+
+// Test 53: parseTLELines function - tabs converted to spaces
+console.log('\nTest 53: parseTLELines function converts tabs to spaces');
+const tabInput = '\tISS\t\n1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996\n2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428';
+const tabParsed = parseTLELines(tabInput);
+assert(tabParsed[0].indexOf('\t') === -1, 'Tabs converted to spaces and trimmed');
+
+// Test 54: Unicode in satellite name (should work)
+console.log('\nTest 54: TLE with Unicode characters in satellite name');
+const tleUnicode = `СПУТНИК-1 🛰️
+1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(tleUnicode);
+    assert(result !== null, 'Parse TLE with Unicode in satellite name');
+    assertEquals(result.satelliteName, 'СПУТНИК-1 🛰️', 'Unicode satellite name preserved');
+} catch (e) {
+    assert(false, 'Unicode in satellite name should be allowed: ' + e.message);
+}
+
+// Test 55: Empty string after whitespace normalization
+console.log('\nTest 55: Empty string after normalization (only whitespace)');
+try {
+    parseTLE('   \n\n\t\t\n   ');
+    assert(false, 'Empty string should throw error');
+} catch (e) {
+    assert(e.code === ERROR_CODES.EMPTY_INPUT || e.name === 'TLEValidationError', 'Empty string throws appropriate error');
+}
+
+// Test 56: Very long satellite name with whitespace
+console.log('\nTest 56: Very long satellite name with surrounding whitespace');
+const longNameWhitespace = `   ${'A'.repeat(30)}
+1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(longNameWhitespace);
+    assert(result !== null, 'Parse TLE with long name and whitespace');
+    assertEquals(result.satelliteName, 'A'.repeat(30), 'Long name trimmed correctly');
+    assert(result.warnings && result.warnings.length > 0, 'Warning issued for long satellite name');
+} catch (e) {
+    assert(false, 'Long name with whitespace should parse with warning: ' + e.message);
+}
+
+// Test 57: Lines with only whitespace between valid lines
+console.log('\nTest 57: TLE with whitespace-only lines between valid lines');
+const whitespaceOnlyLines = `ISS
+
+1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+\t\t
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(whitespaceOnlyLines);
+    assert(result !== null, 'Parse TLE with whitespace-only lines');
+    assertEquals(result.satelliteName, 'ISS', 'Whitespace-only lines filtered correctly');
+} catch (e) {
+    assert(false, 'Whitespace-only lines should be filtered: ' + e.message);
+}
+
+// Test 58: CRLF with 3-line format
+console.log('\nTest 58: 3-line TLE with CRLF line endings');
+const tleCRLF3Line = 'ISS (ZARYA)\r\n1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996\r\n2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428';
+try {
+    const result = parseTLE(tleCRLF3Line);
+    assert(result !== null, 'Parse 3-line TLE with CRLF');
+    assertEquals(result.satelliteName, 'ISS (ZARYA)', 'CRLF 3-line: Satellite name extracted');
+    assertEquals(result.satelliteNumber1, '25544', 'CRLF 3-line: Satellite number extracted');
+} catch (e) {
+    assert(false, '3-line TLE with CRLF should parse correctly: ' + e.message);
+}
+
+// Test 59: Validation with CRLF line endings
+console.log('\nTest 59: Validate TLE with CRLF line endings');
+const validateCRLF = '1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996\r\n2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428';
+const validationResult = validateTLE(validateCRLF);
+assert(validationResult.isValid, 'CRLF TLE passes validation');
+
+// Test 60: Complex whitespace scenario
+console.log('\nTest 60: Complex whitespace scenario (tabs, spaces, multiple types of line endings)');
+const complexWhitespace = '\t  \r\n\r\n  ISS  \t\r\n\r1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996  \t\r\n\n\r2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428\t  \n\r\n';
+try {
+    const result = parseTLE(complexWhitespace);
+    assert(result !== null, 'Parse TLE with complex whitespace');
+    assertEquals(result.satelliteName, 'ISS', 'Complex whitespace: Satellite name extracted');
+    assertEquals(result.satelliteNumber1, '25544', 'Complex whitespace: Satellite number extracted');
+} catch (e) {
+    assert(false, 'Complex whitespace scenario should be handled: ' + e.message);
 }
 
 console.log('\n=== Test Summary ===');
