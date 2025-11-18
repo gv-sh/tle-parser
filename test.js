@@ -1,9 +1,238 @@
 // test.js
-const { parseTLE } = require('./index');
+const {
+    parseTLE,
+    validateTLE,
+    calculateChecksum,
+    validateChecksum,
+    validateLineStructure,
+    validateSatelliteNumber,
+    validateClassification,
+    validateNumericRange
+} = require('./index');
 
-const tleData = `
+// Test counter
+let testsPassed = 0;
+let testsFailed = 0;
+
+function assert(condition, testName) {
+    if (condition) {
+        console.log(`✓ PASS: ${testName}`);
+        testsPassed++;
+    } else {
+        console.error(`✗ FAIL: ${testName}`);
+        testsFailed++;
+    }
+}
+
+function assertEquals(actual, expected, testName) {
+    if (actual === expected) {
+        console.log(`✓ PASS: ${testName}`);
+        testsPassed++;
+    } else {
+        console.error(`✗ FAIL: ${testName}`);
+        console.error(`  Expected: ${expected}`);
+        console.error(`  Actual: ${actual}`);
+        testsFailed++;
+    }
+}
+
+console.log('=== TLE Parser Validation Tests ===\n');
+
+// Test 1: Valid TLE data (ISS)
+console.log('Test 1: Valid TLE data (ISS)');
+const validTLE = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+
+try {
+    const result = parseTLE(validTLE);
+    assert(result !== null, 'Parse valid TLE');
+    assertEquals(result.satelliteNumber1, '25544', 'Correct satellite number extracted');
+    assertEquals(result.inclination, '51.6453', 'Correct inclination extracted');
+} catch (e) {
+    assert(false, 'Parse valid TLE - threw error: ' + e.message);
+}
+
+// Test 2: Valid TLE with satellite name
+console.log('\nTest 2: Valid TLE with satellite name');
+const validTLEWithName = `ISS (ZARYA)
+1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+
+try {
+    const result = parseTLE(validTLEWithName);
+    assert(result !== null, 'Parse valid TLE with satellite name');
+    assertEquals(result.satelliteName, 'ISS (ZARYA)', 'Correct satellite name extracted');
+} catch (e) {
+    assert(false, 'Parse valid TLE with satellite name - threw error: ' + e.message);
+}
+
+// Test 3: Checksum calculation
+console.log('\nTest 3: Checksum calculation');
+const line1 = '1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996';
+const checksum1 = calculateChecksum(line1);
+assertEquals(checksum1, 6, 'Correct checksum calculated for line 1');
+
+// Test 4: Checksum validation
+console.log('\nTest 4: Checksum validation');
+const checksumResult = validateChecksum(line1);
+assert(checksumResult.isValid, 'Valid checksum passes validation');
+
+// Test 5: Invalid checksum
+console.log('\nTest 5: Invalid checksum');
+const invalidChecksumLine = '1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9995';
+const invalidChecksumResult = validateChecksum(invalidChecksumLine);
+assert(!invalidChecksumResult.isValid, 'Invalid checksum fails validation');
+
+// Test 6: Line too short
+console.log('\nTest 6: Line too short');
+try {
+    const shortTLE = `1 25544U 98067A
+2 25544  51.6453`;
+    parseTLE(shortTLE);
+    assert(false, 'Line too short should throw error');
+} catch (e) {
+    assert(true, 'Line too short throws error');
+}
+
+// Test 7: Line too long
+console.log('\nTest 7: Line validation with incorrect length');
+const tooLongLine = '1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  99961234';
+const lengthResult = validateLineStructure(tooLongLine, 1);
+assert(!lengthResult.isValid, 'Line too long fails validation');
+
+// Test 8: Incorrect line number
+console.log('\nTest 8: Incorrect line number');
+const wrongLineNumber = '3 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996';
+const lineNumResult = validateLineStructure(wrongLineNumber, 1);
+assert(!lineNumResult.isValid, 'Incorrect line number fails validation');
+
+// Test 9: Satellite number mismatch
+console.log('\nTest 9: Satellite number mismatch');
+const mismatchTLE = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25545  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    parseTLE(mismatchTLE);
+    assert(false, 'Satellite number mismatch should throw error');
+} catch (e) {
+    assert(true, 'Satellite number mismatch throws error');
+}
+
+// Test 10: Invalid classification
+console.log('\nTest 10: Invalid classification');
+const invalidClassTLE = `1 25544X 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    parseTLE(invalidClassTLE);
+    assert(false, 'Invalid classification should throw error');
+} catch (e) {
+    assert(true, 'Invalid classification throws error');
+}
+
+// Test 11: Validate TLE function with options
+console.log('\nTest 11: Validate TLE function with strict checksums disabled');
+const validation = validateTLE(validTLE, { strictChecksums: false, validateRanges: true });
+assert(validation.isValid, 'Valid TLE passes validation');
+assert(validation.errors.length === 0, 'Valid TLE has no errors');
+
+// Test 12: Out of range inclination
+console.log('\nTest 12: Out of range inclination');
+const badInclinationTLE = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544 251.6453  57.0843 0001671  64.9808  73.0513 15.49338189252426`;
+try {
+    parseTLE(badInclinationTLE);
+    assert(false, 'Out of range inclination should throw error');
+} catch (e) {
+    assert(true, 'Out of range inclination throws error');
+}
+
+// Test 13: Invalid epoch day
+console.log('\nTest 13: Invalid epoch day (out of range)');
+const badEpochTLE = `1 25544U 98067A   20400.83097691  .00001534  00000-0  35580-4 0  9997
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252429`;
+try {
+    parseTLE(badEpochTLE);
+    assert(false, 'Invalid epoch day should throw error');
+} catch (e) {
+    assert(true, 'Invalid epoch day throws error');
+}
+
+// Test 14: Parse without validation
+console.log('\nTest 14: Parse without validation');
+const invalidChecksumTLE = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9995
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(invalidChecksumTLE, { validate: false });
+    assert(result !== null, 'Parse without validation succeeds even with invalid checksum');
+} catch (e) {
+    assert(false, 'Parse without validation should not throw error');
+}
+
+// Test 15: validateNumericRange function
+console.log('\nTest 15: validateNumericRange function');
+const rangeResult1 = validateNumericRange('50.5', 'Test Field', 0, 100);
+assert(rangeResult1.isValid, 'Value in range passes validation');
+
+const rangeResult2 = validateNumericRange('150.5', 'Test Field', 0, 100);
+assert(!rangeResult2.isValid, 'Value out of range fails validation');
+
+const rangeResult3 = validateNumericRange('abc', 'Test Field', 0, 100);
+assert(!rangeResult3.isValid, 'Non-numeric value fails validation');
+
+// Test 16: Only 1 line provided
+console.log('\nTest 16: Only 1 line provided');
+const oneLine = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996`;
+try {
+    parseTLE(oneLine);
+    assert(false, 'Only 1 line should throw error');
+} catch (e) {
+    assert(true, 'Only 1 line throws error');
+}
+
+// Test 17: More than 3 lines provided
+console.log('\nTest 17: More than 3 lines provided');
+const tooManyLines = `ISS (ZARYA)
 1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
 2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428
-`;
+Extra line`;
+try {
+    parseTLE(tooManyLines);
+    assert(false, 'More than 3 lines should throw error');
+} catch (e) {
+    assert(true, 'More than 3 lines throws error');
+}
 
-console.log(parseTLE(tleData));
+// Test 18: validateClassification with valid values
+console.log('\nTest 18: validateClassification with valid values');
+const validClassLine = '1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996';
+const classResult = validateClassification(validClassLine);
+assert(classResult.isValid, 'Valid classification (U) passes');
+
+// Test 19: Another valid TLE (Hubble Space Telescope)
+console.log('\nTest 19: Another valid TLE (Hubble Space Telescope)');
+const hubbleTLE = `1 20580U 90037B   20300.40752066  .00000935  00000-0  51815-4 0  9990
+2 20580  28.4694 291.5056 0002821  87.1571 289.7311 15.09612758476361`;
+try {
+    const result = parseTLE(hubbleTLE);
+    assert(result !== null, 'Parse Hubble TLE');
+    assertEquals(result.satelliteNumber1, '20580', 'Correct Hubble satellite number');
+} catch (e) {
+    assert(false, 'Parse Hubble TLE - threw error: ' + e.message);
+}
+
+// Test 20: Validate eccentricity range
+console.log('\nTest 20: Validate eccentricity range');
+const eccResult = validateNumericRange('0.0001671', 'Eccentricity', 0, 1);
+assert(eccResult.isValid, 'Valid eccentricity passes');
+
+console.log('\n=== Test Summary ===');
+console.log(`Total Tests: ${testsPassed + testsFailed}`);
+console.log(`Passed: ${testsPassed}`);
+console.log(`Failed: ${testsFailed}`);
+
+if (testsFailed === 0) {
+    console.log('\n🎉 All tests passed!');
+    process.exit(0);
+} else {
+    console.log(`\n❌ ${testsFailed} test(s) failed`);
+    process.exit(1);
+}
