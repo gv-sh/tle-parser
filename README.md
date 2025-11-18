@@ -11,6 +11,11 @@ A robust parser for TLE (Two-Line Element) satellite data with comprehensive inp
 - Satellite number consistency checking
 - Classification validation
 - Flexible validation options
+- **Robust edge case handling:**
+  - Cross-platform line ending support (CRLF, LF, CR, and mixed)
+  - Automatic whitespace normalization (leading/trailing/multiple empty lines)
+  - Tab character handling and conversion
+  - Unicode character support in satellite names
 
 ## Installation
 
@@ -181,6 +186,82 @@ Validates the checksum of a TLE line.
 - `validateClassification(line1)`: Validates classification character (U, C, S)
 - `validateNumericRange(value, fieldName, min, max)`: Validates numeric field ranges
 
+### Edge Case Handling Functions
+
+- `normalizeLineEndings(input)`: Normalizes CRLF, LF, and CR line endings to LF
+- `parseTLELines(tleString)`: Parses TLE string into lines with robust whitespace handling
+
+## Edge Case Handling
+
+The parser automatically handles various edge cases and malformed input to ensure reliable parsing across different platforms and data sources:
+
+### Line Ending Normalization
+
+The parser automatically handles different line ending conventions:
+
+```javascript
+// Windows-style (CRLF)
+const windowsTLE = '1 25544U...\r\n2 25544...';
+parseTLE(windowsTLE); // ✓ Works
+
+// Unix-style (LF)
+const unixTLE = '1 25544U...\n2 25544...';
+parseTLE(unixTLE); // ✓ Works
+
+// Old Mac-style (CR)
+const macTLE = '1 25544U...\r2 25544...';
+parseTLE(macTLE); // ✓ Works
+
+// Mixed line endings
+const mixedTLE = 'ISS\r\n1 25544U...\n2 25544...';
+parseTLE(mixedTLE); // ✓ Works
+```
+
+### Whitespace Handling
+
+The parser handles various whitespace edge cases:
+
+```javascript
+// Leading/trailing whitespace
+const withSpaces = '   \n  1 25544U...  \n  2 25544...   \n   ';
+parseTLE(withSpaces); // ✓ Works - whitespace is trimmed
+
+// Multiple empty lines
+const emptyLines = '\n\n\n1 25544U...\n\n\n2 25544...\n\n\n';
+parseTLE(emptyLines); // ✓ Works - empty lines are filtered
+
+// Tabs in input
+const withTabs = '\t1 25544U...\t\n\t2 25544...\t';
+parseTLE(withTabs); // ✓ Works - tabs are converted to spaces and trimmed
+
+// Whitespace-only lines
+const messyInput = 'ISS\n  \t  \n1 25544U...\n\t\t\n2 25544...';
+parseTLE(messyInput); // ✓ Works - whitespace-only lines are filtered
+```
+
+### Unicode Support
+
+The parser supports Unicode characters in satellite names:
+
+```javascript
+const unicodeTLE = `СПУТНИК-1 🛰️
+1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+
+const result = parseTLE(unicodeTLE);
+console.log(result.satelliteName); // 'СПУТНИК-1 🛰️'
+```
+
+### Complex Scenarios
+
+The parser can handle combinations of edge cases:
+
+```javascript
+// Complex whitespace with mixed line endings, tabs, and empty lines
+const complexInput = '\t  \r\n\r\n  ISS  \t\r\n\r1 25544U...  \t\r\n\n\r2 25544...\t  \n\r\n';
+parseTLE(complexInput); // ✓ Works - all edge cases handled automatically
+```
+
 ## Validation Rules
 
 The parser implements comprehensive validation according to TLE format specifications:
@@ -219,12 +300,15 @@ Run the comprehensive test suite:
 npm test
 ```
 
-The test suite includes 20+ test cases covering:
-- Valid TLE parsing
+The test suite includes 111 test cases covering:
+- Valid TLE parsing (2-line and 3-line formats)
 - Checksum calculation and validation
 - Invalid input handling
 - Field range validation
-- Edge cases and error conditions
+- Line ending variations (CRLF, LF, CR, mixed)
+- Whitespace handling (tabs, empty lines, excessive whitespace)
+- Unicode support
+- Complex edge cases and error conditions
 
 ## TLE Format Reference
 
