@@ -1,9 +1,64 @@
 const fs = require('fs');
 const path = require('path');
 
-// Load the TLE configuration
+// Load the TLE configuration with proper error handling
 const tleConfigPath = path.join(__dirname, 'tleConfig.json');
-const tleConfig = JSON.parse(fs.readFileSync(tleConfigPath, 'utf-8'));
+let tleConfig;
+try {
+    const configData = fs.readFileSync(tleConfigPath, 'utf-8');
+    tleConfig = JSON.parse(configData);
+} catch (error) {
+    if (error.code === 'ENOENT') {
+        throw new Error(`TLE configuration file not found: ${tleConfigPath}`);
+    } else if (error instanceof SyntaxError) {
+        throw new Error(`Invalid TLE configuration JSON: ${error.message}`);
+    }
+    throw error;
+}
+
+// Error codes for structured error handling
+const ERROR_CODES = {
+    INVALID_INPUT_TYPE: 'INVALID_INPUT_TYPE',
+    EMPTY_INPUT: 'EMPTY_INPUT',
+    INVALID_LINE_COUNT: 'INVALID_LINE_COUNT',
+    INVALID_LINE_LENGTH: 'INVALID_LINE_LENGTH',
+    INVALID_LINE_NUMBER: 'INVALID_LINE_NUMBER',
+    CHECKSUM_MISMATCH: 'CHECKSUM_MISMATCH',
+    INVALID_CHECKSUM_CHARACTER: 'INVALID_CHECKSUM_CHARACTER',
+    SATELLITE_NUMBER_MISMATCH: 'SATELLITE_NUMBER_MISMATCH',
+    INVALID_SATELLITE_NUMBER: 'INVALID_SATELLITE_NUMBER',
+    INVALID_CLASSIFICATION: 'INVALID_CLASSIFICATION',
+    VALUE_OUT_OF_RANGE: 'VALUE_OUT_OF_RANGE',
+    INVALID_NUMBER_FORMAT: 'INVALID_NUMBER_FORMAT',
+    SATELLITE_NAME_TOO_LONG: 'SATELLITE_NAME_TOO_LONG',
+    SATELLITE_NAME_FORMAT_WARNING: 'SATELLITE_NAME_FORMAT_WARNING'
+};
+
+/**
+ * Custom error class for TLE validation errors
+ */
+class TLEValidationError extends Error {
+    constructor(message, errors, warnings = []) {
+        super(message);
+        this.name = 'TLEValidationError';
+        this.errors = errors;
+        this.warnings = warnings;
+        Error.captureStackTrace(this, this.constructor);
+    }
+}
+
+/**
+ * Custom error class for TLE format errors
+ */
+class TLEFormatError extends Error {
+    constructor(message, code, details = {}) {
+        super(message);
+        this.name = 'TLEFormatError';
+        this.code = code;
+        this.details = details;
+        Error.captureStackTrace(this, this.constructor);
+    }
+}
 
 /**
  * Calculate the checksum for a TLE line according to NORAD specification
@@ -28,25 +83,54 @@ function calculateChecksum(line) {
 /**
  * Validate TLE checksum
  * @param {string} line - The TLE line to validate
- * @returns {object} - Validation result {isValid: boolean, expected: number, actual: number}
+ * @returns {object} - Validation result {isValid: boolean, expected: number, actual: number, error: object}
  */
 function validateChecksum(line) {
     if (line.length !== 69) {
-        return { isValid: false, expected: null, actual: null, error: 'Line length must be 69 characters' };
+        return {
+            isValid: false,
+            expected: null,
+            actual: null,
+            error: {
+                code: ERROR_CODES.INVALID_LINE_LENGTH,
+                message: 'Line length must be 69 characters',
+                field: 'line_length',
+                expected: 69,
+                actual: line.length
+            }
+        };
     }
 
     const expected = calculateChecksum(line);
     const actual = parseInt(line[68], 10);
 
     if (isNaN(actual)) {
-        return { isValid: false, expected, actual: null, error: 'Checksum position must contain a digit' };
+        return {
+            isValid: false,
+            expected,
+            actual: null,
+            error: {
+                code: ERROR_CODES.INVALID_CHECKSUM_CHARACTER,
+                message: 'Checksum position must contain a digit',
+                field: 'checksum',
+                position: 68,
+                value: line[68]
+            }
+        };
     }
 
+    const isValid = expected === actual;
     return {
-        isValid: expected === actual,
+        isValid,
         expected,
         actual,
-        error: expected === actual ? null : `Checksum mismatch: expected ${expected}, got ${actual}`
+        error: isValid ? null : {
+            code: ERROR_CODES.CHECKSUM_MISMATCH,
+            message: `Checksum mismatch: expected ${expected}, got ${actual}`,
+            field: 'checksum',
+            expected,
+            actual
+        }
     };
 }
 
@@ -54,27 +138,49 @@ function validateChecksum(line) {
  * Validate TLE line structure
  * @param {string} line - The TLE line to validate
  * @param {number} expectedLineNumber - Expected line number (1 or 2)
- * @returns {object} - Validation result with errors array
+ * @returns {object} - Validation result with structured errors array
  */
 function validateLineStructure(line, expectedLineNumber) {
     const errors = [];
 
     // Check line length
     if (line.length !== 69) {
-        errors.push(`Line ${expectedLineNumber} must be exactly 69 characters (got ${line.length})`);
+        errors.push({
+            code: ERROR_CODES.INVALID_LINE_LENGTH,
+            message: `Line ${expectedLineNumber} must be exactly 69 characters (got ${line.length})`,
+            line: expectedLineNumber,
+            field: 'line_length',
+            expected: 69,
+            actual: line.length,
+            severity: 'error'
+        });
         return { isValid: false, errors };
     }
 
     // Check line number
     const lineNumber = line[0];
     if (lineNumber !== expectedLineNumber.toString()) {
-        errors.push(`Line ${expectedLineNumber} must start with '${expectedLineNumber}' (got '${lineNumber}')`);
+        errors.push({
+            code: ERROR_CODES.INVALID_LINE_NUMBER,
+            message: `Line ${expectedLineNumber} must start with '${expectedLineNumber}' (got '${lineNumber}')`,
+            line: expectedLineNumber,
+            field: 'line_number',
+            expected: expectedLineNumber.toString(),
+            actual: lineNumber,
+            severity: 'error'
+        });
     }
 
     // Check checksum
     const checksumResult = validateChecksum(line);
     if (!checksumResult.isValid) {
-        errors.push(`Line ${expectedLineNumber}: ${checksumResult.error}`);
+        const checksumError = checksumResult.error;
+        errors.push({
+            ...checksumError,
+            line: expectedLineNumber,
+            message: `Line ${expectedLineNumber}: ${checksumError.message}`,
+            severity: 'error'
+        });
     }
 
     return { isValid: errors.length === 0, errors };
@@ -84,7 +190,7 @@ function validateLineStructure(line, expectedLineNumber) {
  * Validate satellite number consistency between lines
  * @param {string} line1 - First TLE line
  * @param {string} line2 - Second TLE line
- * @returns {object} - Validation result
+ * @returns {object} - Validation result with structured error
  */
 function validateSatelliteNumber(line1, line2) {
     const satNum1 = line1.substring(2, 7).trim();
@@ -93,7 +199,14 @@ function validateSatelliteNumber(line1, line2) {
     if (satNum1 !== satNum2) {
         return {
             isValid: false,
-            error: `Satellite numbers must match (Line 1: ${satNum1}, Line 2: ${satNum2})`
+            error: {
+                code: ERROR_CODES.SATELLITE_NUMBER_MISMATCH,
+                message: `Satellite numbers must match (Line 1: ${satNum1}, Line 2: ${satNum2})`,
+                field: 'satellite_number',
+                line1Value: satNum1,
+                line2Value: satNum2,
+                severity: 'error'
+            }
         };
     }
 
@@ -101,7 +214,13 @@ function validateSatelliteNumber(line1, line2) {
     if (!/^\d+$/.test(satNum1)) {
         return {
             isValid: false,
-            error: `Satellite number must be numeric (got '${satNum1}')`
+            error: {
+                code: ERROR_CODES.INVALID_SATELLITE_NUMBER,
+                message: `Satellite number must be numeric (got '${satNum1}')`,
+                field: 'satellite_number',
+                value: satNum1,
+                severity: 'error'
+            }
         };
     }
 
@@ -111,7 +230,7 @@ function validateSatelliteNumber(line1, line2) {
 /**
  * Validate classification character
  * @param {string} line1 - First TLE line
- * @returns {object} - Validation result
+ * @returns {object} - Validation result with structured error
  */
 function validateClassification(line1) {
     const classification = line1[7];
@@ -120,7 +239,14 @@ function validateClassification(line1) {
     if (!validClassifications.includes(classification)) {
         return {
             isValid: false,
-            error: `Classification must be U, C, or S (got '${classification}')`
+            error: {
+                code: ERROR_CODES.INVALID_CLASSIFICATION,
+                message: `Classification must be U, C, or S (got '${classification}')`,
+                field: 'classification',
+                expected: validClassifications,
+                actual: classification,
+                severity: 'error'
+            }
         };
     }
 
@@ -133,7 +259,7 @@ function validateClassification(line1) {
  * @param {string} fieldName - Name of the field
  * @param {number} min - Minimum allowed value
  * @param {number} max - Maximum allowed value
- * @returns {object} - Validation result
+ * @returns {object} - Validation result with structured error
  */
 function validateNumericRange(value, fieldName, min, max) {
     const numValue = parseFloat(value);
@@ -141,14 +267,28 @@ function validateNumericRange(value, fieldName, min, max) {
     if (isNaN(numValue)) {
         return {
             isValid: false,
-            error: `${fieldName} must be numeric (got '${value}')`
+            error: {
+                code: ERROR_CODES.INVALID_NUMBER_FORMAT,
+                message: `${fieldName} must be numeric (got '${value}')`,
+                field: fieldName,
+                value: value,
+                severity: 'error'
+            }
         };
     }
 
     if (numValue < min || numValue > max) {
         return {
             isValid: false,
-            error: `${fieldName} must be between ${min} and ${max} (got ${numValue})`
+            error: {
+                code: ERROR_CODES.VALUE_OUT_OF_RANGE,
+                message: `${fieldName} must be between ${min} and ${max} (got ${numValue})`,
+                field: fieldName,
+                value: numValue,
+                min: min,
+                max: max,
+                severity: 'error'
+            }
         };
     }
 
@@ -160,9 +300,27 @@ function validateNumericRange(value, fieldName, min, max) {
  * Validates checksums for BOTH Line 1 and Line 2
  * @param {string} tleString - The TLE data string
  * @param {object} options - Validation options {strictChecksums: boolean, validateRanges: boolean}
- * @returns {object} - Validation result with detailed errors
+ * @returns {object} - Validation result with detailed structured errors and warnings
+ * @throws {TypeError} - If input types are invalid
  */
 function validateTLE(tleString, options = {}) {
+    // Input validation
+    if (typeof tleString !== 'string') {
+        throw new TypeError('TLE data must be a string');
+    }
+
+    if (typeof options !== 'object' || options === null || Array.isArray(options)) {
+        throw new TypeError('Options must be an object');
+    }
+
+    if (tleString.length === 0) {
+        throw new TLEFormatError(
+            'TLE string cannot be empty',
+            ERROR_CODES.EMPTY_INPUT,
+            { inputLength: 0 }
+        );
+    }
+
     const {
         strictChecksums = true,
         validateRanges = true
@@ -176,12 +334,26 @@ function validateTLE(tleString, options = {}) {
 
     // Check number of lines (can be 2 or 3, where line 0 is satellite name)
     if (tleLines.length < 2) {
-        errors.push('TLE must contain at least 2 lines');
+        errors.push({
+            code: ERROR_CODES.INVALID_LINE_COUNT,
+            message: 'TLE must contain at least 2 lines',
+            field: 'line_count',
+            expected: '2 or 3',
+            actual: tleLines.length,
+            severity: 'error'
+        });
         return { isValid: false, errors, warnings };
     }
 
     if (tleLines.length > 3) {
-        errors.push(`TLE must contain 2 or 3 lines (got ${tleLines.length})`);
+        errors.push({
+            code: ERROR_CODES.INVALID_LINE_COUNT,
+            message: `TLE must contain 2 or 3 lines (got ${tleLines.length})`,
+            field: 'line_count',
+            expected: '2 or 3',
+            actual: tleLines.length,
+            severity: 'error'
+        });
         return { isValid: false, errors, warnings };
     }
 
@@ -196,11 +368,24 @@ function validateTLE(tleString, options = {}) {
 
         // Validate satellite name line (should not start with 1 or 2)
         if (tleLines[0][0] === '1' || tleLines[0][0] === '2') {
-            warnings.push('Line 0 starts with "1" or "2", might be incorrectly formatted');
+            warnings.push({
+                code: ERROR_CODES.SATELLITE_NAME_FORMAT_WARNING,
+                message: 'Line 0 starts with "1" or "2", might be incorrectly formatted',
+                field: 'satellite_name',
+                value: tleLines[0],
+                severity: 'warning'
+            });
         }
 
         if (tleLines[0].length > 24) {
-            warnings.push('Satellite name (Line 0) should be 24 characters or less');
+            warnings.push({
+                code: ERROR_CODES.SATELLITE_NAME_TOO_LONG,
+                message: 'Satellite name (Line 0) should be 24 characters or less',
+                field: 'satellite_name',
+                expected: 24,
+                actual: tleLines[0].length,
+                severity: 'warning'
+            });
         }
     }
 
@@ -277,7 +462,11 @@ function validateTLE(tleString, options = {}) {
         const meanMotion = line2.substring(52, 63).trim();
         const mmResult = validateNumericRange(meanMotion, 'Mean Motion', 0, 20);
         if (!mmResult.isValid) {
-            warnings.push(mmResult.error + ' (unusual but may be valid)');
+            warnings.push({
+                ...mmResult.error,
+                message: mmResult.error.message + ' (unusual but may be valid)',
+                severity: 'warning'
+            });
         }
 
         // Epoch Year (00-99)
@@ -305,29 +494,45 @@ function validateTLE(tleString, options = {}) {
 /**
  * Parse TLE data with optional validation
  * @param {string} tleString - The TLE data string
- * @param {object} options - Parsing options {validate: boolean, strictChecksums: boolean, validateRanges: boolean}
- * @returns {object} - Parsed TLE object
- * @throws {Error} - If validation fails and validate option is true
+ * @param {object} options - Parsing options {validate: boolean, strictChecksums: boolean, validateRanges: boolean, includeWarnings: boolean}
+ * @returns {object} - Parsed TLE object with optional warnings array
+ * @throws {TypeError} - If input types are invalid
+ * @throws {TLEValidationError} - If validation fails and validate option is true
  */
 function parseTLE(tleString, options = {}) {
+    // Input validation
+    if (typeof tleString !== 'string') {
+        throw new TypeError('TLE data must be a string');
+    }
+
+    if (typeof options !== 'object' || options === null || Array.isArray(options)) {
+        throw new TypeError('Options must be an object');
+    }
+
     const {
         validate = true,
         strictChecksums = true,
-        validateRanges = true
+        validateRanges = true,
+        includeWarnings = true
     } = options;
 
     // Validate if requested
+    let validationWarnings = [];
     if (validate) {
         const validation = validateTLE(tleString, { strictChecksums, validateRanges });
         if (!validation.isValid) {
-            const errorMsg = 'TLE validation failed:\n' + validation.errors.join('\n');
-            throw new Error(errorMsg);
+            // Create detailed error message
+            const errorMessages = validation.errors.map(err =>
+                typeof err === 'string' ? err : err.message
+            );
+            const errorMsg = 'TLE validation failed:\n' + errorMessages.join('\n');
+
+            // Throw custom validation error with structured data
+            throw new TLEValidationError(errorMsg, validation.errors, validation.warnings);
         }
 
-        // Log warnings if any
-        if (validation.warnings.length > 0) {
-            console.warn('TLE validation warnings:\n' + validation.warnings.join('\n'));
-        }
+        // Store warnings for later inclusion in result
+        validationWarnings = validation.warnings;
     }
 
     const tleLines = tleString.trim().split('\n').map(line => line.trim()).filter(line => line.length > 0);
@@ -363,6 +568,11 @@ function parseTLE(tleString, options = {}) {
         tleObject[key] = line.substring(start, end).trim();
     }
 
+    // Include warnings in the result if requested and available
+    if (includeWarnings && validationWarnings.length > 0) {
+        tleObject.warnings = validationWarnings;
+    }
+
     return tleObject;
 }
 
@@ -374,5 +584,8 @@ module.exports = {
     validateLineStructure,
     validateSatelliteNumber,
     validateClassification,
-    validateNumericRange
+    validateNumericRange,
+    TLEValidationError,
+    TLEFormatError,
+    ERROR_CODES
 };

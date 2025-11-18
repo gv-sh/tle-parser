@@ -7,7 +7,10 @@ const {
     validateLineStructure,
     validateSatelliteNumber,
     validateClassification,
-    validateNumericRange
+    validateNumericRange,
+    TLEValidationError,
+    TLEFormatError,
+    ERROR_CODES
 } = require('./index');
 
 // Test counter
@@ -270,6 +273,116 @@ const validLine2 = '2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338
 const line1Check = validateChecksum(validLine1);
 const line2Check = validateChecksum(validLine2);
 assert(line1Check.isValid && line2Check.isValid, 'Both line checksums validate correctly');
+
+// Test 26: Input type validation - non-string input
+console.log('\nTest 26: Input type validation - non-string input');
+try {
+    parseTLE(12345);
+    assert(false, 'Non-string input should throw TypeError');
+} catch (e) {
+    assert(e instanceof TypeError, 'Non-string input throws TypeError');
+    assert(e.message.includes('must be a string'), 'TypeError has correct message');
+}
+
+// Test 27: Empty string input
+console.log('\nTest 27: Empty string input');
+try {
+    parseTLE('');
+    assert(false, 'Empty string should throw error');
+} catch (e) {
+    assert(e instanceof TLEFormatError, 'Empty string throws TLEFormatError');
+    assertEquals(e.code, ERROR_CODES.EMPTY_INPUT, 'Empty string error has correct error code');
+}
+
+// Test 28: TLEValidationError with structured errors
+console.log('\nTest 28: TLEValidationError with structured errors');
+try {
+    const invalidTLE = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9995
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+    parseTLE(invalidTLE);
+    assert(false, 'Invalid TLE should throw TLEValidationError');
+} catch (e) {
+    assert(e instanceof TLEValidationError, 'Invalid TLE throws TLEValidationError');
+    assert(e.name === 'TLEValidationError', 'Error has correct name');
+    assert(Array.isArray(e.errors), 'Error has errors array');
+    assert(e.errors.length > 0, 'Error has at least one error');
+}
+
+// Test 29: Structured error objects have error codes
+console.log('\nTest 29: Structured error objects have error codes');
+const invalidLineTLE = `1 25544U 98067A
+2 25544  51.6453`;
+try {
+    parseTLE(invalidLineTLE);
+    assert(false, 'Invalid line length should throw error');
+} catch (e) {
+    assert(e.errors && e.errors.length > 0, 'Error has errors array');
+    const firstError = e.errors[0];
+    assert(firstError.code !== undefined, 'Error object has code property');
+    assert(firstError.message !== undefined, 'Error object has message property');
+    assert(firstError.severity !== undefined, 'Error object has severity property');
+}
+
+// Test 30: Warnings returned in parsed result
+console.log('\nTest 30: Warnings returned in parsed result');
+const tleWithLongName = `This is a very long satellite name that exceeds 24 characters
+1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(tleWithLongName);
+    assert(result.warnings !== undefined, 'Result includes warnings');
+    assert(Array.isArray(result.warnings), 'Warnings is an array');
+    assert(result.warnings.length > 0, 'Warnings array has items');
+    assert(result.warnings[0].code !== undefined, 'Warning has error code');
+    assert(result.warnings[0].severity === 'warning', 'Warning has severity "warning"');
+} catch (e) {
+    assert(false, 'Valid TLE with warnings should not throw: ' + e.message);
+}
+
+// Test 31: includeWarnings option can disable warnings in result
+console.log('\nTest 31: includeWarnings option can disable warnings in result');
+try {
+    const result = parseTLE(tleWithLongName, { includeWarnings: false });
+    assert(result.warnings === undefined, 'Result does not include warnings when disabled');
+} catch (e) {
+    assert(false, 'Valid TLE should parse: ' + e.message);
+}
+
+// Test 32: Invalid options type
+console.log('\nTest 32: Invalid options type');
+try {
+    parseTLE(validTLE, 'invalid');
+    assert(false, 'Invalid options type should throw TypeError');
+} catch (e) {
+    assert(e instanceof TypeError, 'Invalid options throws TypeError');
+    assert(e.message.includes('Options must be an object'), 'TypeError has correct message');
+}
+
+// Test 33: validateTLE with invalid input type
+console.log('\nTest 33: validateTLE with invalid input type');
+try {
+    validateTLE(null);
+    assert(false, 'Null input should throw TypeError');
+} catch (e) {
+    assert(e instanceof TypeError, 'Null input throws TypeError');
+}
+
+// Test 34: Error codes are exported and accessible
+console.log('\nTest 34: Error codes are exported and accessible');
+assert(ERROR_CODES !== undefined, 'ERROR_CODES is exported');
+assert(ERROR_CODES.INVALID_LINE_LENGTH !== undefined, 'ERROR_CODES contains INVALID_LINE_LENGTH');
+assert(ERROR_CODES.CHECKSUM_MISMATCH !== undefined, 'ERROR_CODES contains CHECKSUM_MISMATCH');
+assert(ERROR_CODES.SATELLITE_NUMBER_MISMATCH !== undefined, 'ERROR_CODES contains SATELLITE_NUMBER_MISMATCH');
+
+// Test 35: Structured error has expected/actual values
+console.log('\nTest 35: Structured error has expected/actual values');
+const lineStructureResult = validateLineStructure('1 25544U', 1);
+assert(!lineStructureResult.isValid, 'Short line fails validation');
+assert(lineStructureResult.errors.length > 0, 'Has errors');
+const error = lineStructureResult.errors[0];
+assert(error.expected === 69, 'Error has expected value');
+assert(error.actual === 8, 'Error has actual value');
+assert(error.code === ERROR_CODES.INVALID_LINE_LENGTH, 'Error has correct code');
 
 console.log('\n=== Test Summary ===');
 console.log(`Total Tests: ${testsPassed + testsFailed}`);
