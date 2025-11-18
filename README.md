@@ -10,6 +10,7 @@ A robust parser for TLE (Two-Line Element) satellite data with comprehensive inp
 - Field range validation
 - Satellite number consistency checking
 - Classification validation
+- Deprecation and unusual value warnings
 - Flexible validation options
 
 ## Installation
@@ -102,6 +103,34 @@ if (validation.warnings.length > 0) {
 }
 ```
 
+### Working with Warnings
+
+The parser automatically detects deprecated or unusual values and returns warnings. Warnings do not prevent parsing, but alert you to potential data quality issues.
+
+```javascript
+const { parseTLE } = require('tle-parser');
+
+// TLE with classified data (unusual in public datasets)
+const classifiedTLE = `1 25544C 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+
+const result = parseTLE(classifiedTLE);
+
+if (result.warnings && result.warnings.length > 0) {
+    result.warnings.forEach(warning => {
+        console.log(`WARNING [${warning.code}]: ${warning.message}`);
+    });
+}
+// Output: WARNING [CLASSIFIED_DATA_WARNING]: Classification 'C' is unusual in public TLE data (typically 'U' for unclassified)
+```
+
+Warnings include structured information:
+- `code`: Machine-readable warning code (e.g., `STALE_TLE_WARNING`)
+- `message`: Human-readable description
+- `field`: The field that triggered the warning
+- `value`: The actual value
+- `severity`: Always 'warning' for non-critical issues
+
 ### Checksum Calculation and Validation
 
 ```javascript
@@ -181,6 +210,15 @@ Validates the checksum of a TLE line.
 - `validateClassification(line1)`: Validates classification character (U, C, S)
 - `validateNumericRange(value, fieldName, min, max)`: Validates numeric field ranges
 
+### Warning Check Functions
+
+These functions check for deprecated or unusual values and return warnings:
+
+- `checkClassificationWarnings(line1)`: Detects classified or secret data markers
+- `checkEpochWarnings(line1)`: Detects stale TLE data and deprecated epoch years
+- `checkOrbitalParameterWarnings(line2)`: Detects unusual orbital parameters
+- `checkDragAndEphemerisWarnings(line1)`: Detects unusual drag coefficients and ephemeris types
+
 ## Validation Rules
 
 The parser implements comprehensive validation according to TLE format specifications:
@@ -211,6 +249,27 @@ The parser implements comprehensive validation according to TLE format specifica
 - **Epoch Day**: 1-366.99999999
 - **Mean Motion**: 0-20 revolutions/day (warning if exceeded)
 
+## Deprecation and Unusual Value Warnings
+
+The parser automatically detects and warns about deprecated or unusual values that may indicate data quality issues:
+
+### Classification Warnings
+- **CLASSIFIED_DATA_WARNING**: Classification is 'C' (Classified) or 'S' (Secret), which is unusual in public TLE data
+
+### Epoch Warnings
+- **STALE_TLE_WARNING**: TLE epoch is older than 30 days, indicating potentially outdated orbital data
+- **DEPRECATED_EPOCH_YEAR_WARNING**: Epoch year is in the 1900s range (two-digit years 57-99), which is deprecated
+
+### Orbital Parameter Warnings
+- **HIGH_ECCENTRICITY_WARNING**: Eccentricity > 0.25, indicating a highly elliptical orbit (unusual for most satellites)
+- **LOW_MEAN_MOTION_WARNING**: Mean motion < 1.0 rev/day, indicating a very high orbit (unusual except for some GEO satellites)
+- **REVOLUTION_NUMBER_ROLLOVER_WARNING**: Revolution number > 90,000, approaching the rollover limit of 99,999
+
+### Drag and Ephemeris Warnings
+- **NEAR_ZERO_DRAG_WARNING**: B* drag term is exactly zero, which is unusual for satellites in Low Earth Orbit (LEO)
+- **NEGATIVE_DECAY_WARNING**: First derivative of mean motion is negative, indicating orbital decay
+- **NON_STANDARD_EPHEMERIS_WARNING**: Ephemeris type is not '0' (standard SGP4/SDP4)
+
 ## Testing
 
 Run the comprehensive test suite:
@@ -219,12 +278,14 @@ Run the comprehensive test suite:
 npm test
 ```
 
-The test suite includes 20+ test cases covering:
-- Valid TLE parsing
+The test suite includes 100 test cases covering:
+- Valid TLE parsing (2-line and 3-line formats)
 - Checksum calculation and validation
 - Invalid input handling
 - Field range validation
+- Deprecation and unusual value warnings
 - Edge cases and error conditions
+- Structured error reporting
 
 ## TLE Format Reference
 
