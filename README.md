@@ -5,6 +5,7 @@ A robust parser for TLE (Two-Line Element) satellite data with comprehensive inp
 ## Features
 
 - Parse TLE data with or without satellite name (2 or 3 line format)
+- Automatic line ending normalization (CRLF, LF, CR)
 - Comprehensive format validation
 - NORAD checksum verification
 - Field range validation
@@ -120,6 +121,32 @@ console.log('Expected:', result.expected);
 console.log('Actual:', result.actual);
 ```
 
+### Line Ending Normalization
+
+The parser automatically handles different line ending formats:
+
+```javascript
+const { parseTLE, normalizeLineEndings } = require('tle-parser');
+
+// Works with CRLF (Windows-style) line endings
+const tleCRLF = '1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996\r\n2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428';
+const result1 = parseTLE(tleCRLF);
+
+// Works with CR (old Mac-style) line endings
+const tleCR = '1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996\r2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428';
+const result2 = parseTLE(tleCR);
+
+// Works with LF (Unix-style) line endings
+const tleLF = '1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996\n2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428';
+const result3 = parseTLE(tleLF);
+
+// You can also normalize line endings manually
+const normalized = normalizeLineEndings(tleCRLF);
+console.log(normalized); // All line endings converted to \n
+```
+
+The parser automatically converts all line ending types (CRLF, CR, LF) to LF (`\n`) before processing, ensuring consistent parsing regardless of the source platform or file format.
+
 ## API Reference
 
 ### `parseTLE(tleString, options)`
@@ -173,6 +200,15 @@ Validates the checksum of a TLE line.
 - `expected` (number): Calculated checksum
 - `actual` (number): Checksum from line
 - `error` (string): Error message if invalid
+
+### `normalizeLineEndings(text)`
+
+Normalizes line endings to LF (\n), converting CRLF (\r\n) and CR (\r) to LF.
+
+**Parameters:**
+- `text` (string): Text with any line ending format
+
+**Returns:** string with normalized line endings (all converted to \n)
 
 ### Other Validation Functions
 

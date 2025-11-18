@@ -8,6 +8,7 @@ const {
     validateSatelliteNumber,
     validateClassification,
     validateNumericRange,
+    normalizeLineEndings,
     TLEValidationError,
     TLEFormatError,
     ERROR_CODES
@@ -464,6 +465,108 @@ try {
     assertEquals(result.satelliteNumber1, '20580', 'Hubble satellite number correct');
 } catch (e) {
     assert(false, 'Valid 3-line Hubble TLE should not throw: ' + e.message);
+}
+
+// Test 42: normalizeLineEndings function - CRLF to LF
+console.log('\nTest 42: normalizeLineEndings function - CRLF to LF');
+const textWithCRLF = 'line1\r\nline2\r\nline3';
+const normalizedCRLF = normalizeLineEndings(textWithCRLF);
+assertEquals(normalizedCRLF, 'line1\nline2\nline3', 'CRLF normalized to LF');
+
+// Test 43: normalizeLineEndings function - CR to LF
+console.log('\nTest 43: normalizeLineEndings function - CR to LF');
+const textWithCR = 'line1\rline2\rline3';
+const normalizedCR = normalizeLineEndings(textWithCR);
+assertEquals(normalizedCR, 'line1\nline2\nline3', 'CR normalized to LF');
+
+// Test 44: normalizeLineEndings function - LF remains unchanged
+console.log('\nTest 44: normalizeLineEndings function - LF remains unchanged');
+const textWithLF = 'line1\nline2\nline3';
+const normalizedLF = normalizeLineEndings(textWithLF);
+assertEquals(normalizedLF, 'line1\nline2\nline3', 'LF remains unchanged');
+
+// Test 45: normalizeLineEndings function - mixed line endings
+console.log('\nTest 45: normalizeLineEndings function - mixed line endings');
+const textWithMixed = 'line1\r\nline2\rline3\nline4';
+const normalizedMixed = normalizeLineEndings(textWithMixed);
+assertEquals(normalizedMixed, 'line1\nline2\nline3\nline4', 'Mixed line endings normalized to LF');
+
+// Test 46: Parse TLE with CRLF line endings
+console.log('\nTest 46: Parse TLE with CRLF line endings');
+const tleCRLF = '1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996\r\n2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428';
+try {
+    const result = parseTLE(tleCRLF);
+    assert(result !== null, 'Parse TLE with CRLF line endings');
+    assertEquals(result.satelliteNumber1, '25544', 'Correct satellite number with CRLF');
+} catch (e) {
+    assert(false, 'TLE with CRLF line endings should parse: ' + e.message);
+}
+
+// Test 47: Parse TLE with CR line endings
+console.log('\nTest 47: Parse TLE with CR line endings');
+const tleCR = '1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996\r2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428';
+try {
+    const result = parseTLE(tleCR);
+    assert(result !== null, 'Parse TLE with CR line endings');
+    assertEquals(result.satelliteNumber1, '25544', 'Correct satellite number with CR');
+} catch (e) {
+    assert(false, 'TLE with CR line endings should parse: ' + e.message);
+}
+
+// Test 48: Parse TLE with LF line endings (standard)
+console.log('\nTest 48: Parse TLE with LF line endings (standard)');
+const tleLF = '1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996\n2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428';
+try {
+    const result = parseTLE(tleLF);
+    assert(result !== null, 'Parse TLE with LF line endings');
+    assertEquals(result.satelliteNumber1, '25544', 'Correct satellite number with LF');
+} catch (e) {
+    assert(false, 'TLE with LF line endings should parse: ' + e.message);
+}
+
+// Test 49: Parse 3-line TLE with CRLF line endings
+console.log('\nTest 49: Parse 3-line TLE with CRLF line endings');
+const tle3LineCRLF = 'ISS (ZARYA)\r\n1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996\r\n2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428';
+try {
+    const result = parseTLE(tle3LineCRLF);
+    assert(result !== null, 'Parse 3-line TLE with CRLF');
+    assertEquals(result.satelliteName, 'ISS (ZARYA)', 'Satellite name extracted with CRLF');
+    assertEquals(result.satelliteNumber1, '25544', 'Satellite number correct with CRLF');
+} catch (e) {
+    assert(false, '3-line TLE with CRLF should parse: ' + e.message);
+}
+
+// Test 50: Parse 3-line TLE with CR line endings
+console.log('\nTest 50: Parse 3-line TLE with CR line endings');
+const tle3LineCR = 'ISS (ZARYA)\r1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996\r2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428';
+try {
+    const result = parseTLE(tle3LineCR);
+    assert(result !== null, 'Parse 3-line TLE with CR');
+    assertEquals(result.satelliteName, 'ISS (ZARYA)', 'Satellite name extracted with CR');
+    assertEquals(result.satelliteNumber1, '25544', 'Satellite number correct with CR');
+} catch (e) {
+    assert(false, '3-line TLE with CR should parse: ' + e.message);
+}
+
+// Test 51: Validate TLE with CRLF line endings
+console.log('\nTest 51: Validate TLE with CRLF line endings');
+const validateTLECRLF = validateTLE(tleCRLF);
+assert(validateTLECRLF.isValid, 'TLE with CRLF passes validation');
+
+// Test 52: Validate TLE with CR line endings
+console.log('\nTest 52: Validate TLE with CR line endings');
+const validateTLECR = validateTLE(tleCR);
+assert(validateTLECR.isValid, 'TLE with CR passes validation');
+
+// Test 53: Parse TLE with mixed line endings
+console.log('\nTest 53: Parse TLE with mixed line endings');
+const tleMixed = '1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996\r\n2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428';
+try {
+    const result = parseTLE(tleMixed);
+    assert(result !== null, 'Parse TLE with mixed line endings');
+    assertEquals(result.satelliteNumber1, '25544', 'Correct satellite number with mixed line endings');
+} catch (e) {
+    assert(false, 'TLE with mixed line endings should parse: ' + e.message);
 }
 
 console.log('\n=== Test Summary ===');

@@ -61,6 +61,17 @@ class TLEFormatError extends Error {
 }
 
 /**
+ * Normalize line endings to LF (\n)
+ * Handles CRLF (\r\n), CR (\r), and LF (\n) line endings
+ * @param {string} text - The text to normalize
+ * @returns {string} - Text with normalized line endings
+ */
+function normalizeLineEndings(text) {
+    // Replace CRLF (\r\n) with LF (\n), then replace any remaining CR (\r) with LF (\n)
+    return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+}
+
+/**
  * Calculate the checksum for a TLE line according to NORAD specification
  * @param {string} line - The TLE line to calculate checksum for
  * @returns {number} - The calculated checksum (0-9)
@@ -329,8 +340,11 @@ function validateTLE(tleString, options = {}) {
     const errors = [];
     const warnings = [];
 
+    // Normalize line endings (handle CRLF, LF, CR)
+    const normalizedTLE = normalizeLineEndings(tleString);
+
     // Parse lines
-    const tleLines = tleString.trim().split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    const tleLines = normalizedTLE.trim().split('\n').map(line => line.trim()).filter(line => line.length > 0);
 
     // Check number of lines (can be 2 or 3, where line 0 is satellite name)
     if (tleLines.length < 2) {
@@ -535,7 +549,10 @@ function parseTLE(tleString, options = {}) {
         validationWarnings = validation.warnings;
     }
 
-    const tleLines = tleString.trim().split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    // Normalize line endings (handle CRLF, LF, CR)
+    const normalizedTLE = normalizeLineEndings(tleString);
+
+    const tleLines = normalizedTLE.trim().split('\n').map(line => line.trim()).filter(line => line.length > 0);
 
     // Determine line indices
     let line1Index = 0;
@@ -585,6 +602,7 @@ module.exports = {
     validateSatelliteNumber,
     validateClassification,
     validateNumericRange,
+    normalizeLineEndings,
     TLEValidationError,
     TLEFormatError,
     ERROR_CODES
