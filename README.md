@@ -87,6 +87,33 @@ Comprehensive documentation is available in the [docs](docs/) directory:
 npm install tle-parser
 ```
 
+### From CDN
+
+You can use the package directly in the browser via CDN:
+
+**jsDelivr:**
+```html
+<script src="https://cdn.jsdelivr.net/npm/tle-parser@1.0.0/dist/index.browser.min.js"></script>
+<script>
+  const { parseTLE } = window.TLEParser;
+  // Your code here
+</script>
+```
+
+**unpkg:**
+```html
+<script src="https://unpkg.com/tle-parser@1.0.0/dist/index.browser.min.js"></script>
+<script>
+  const { parseTLE } = window.TLEParser;
+  // Your code here
+</script>
+```
+
+For the latest version, you can omit the version number:
+```html
+<script src="https://cdn.jsdelivr.net/npm/tle-parser/dist/index.browser.min.js"></script>
+```
+
 ### From source
 
 Clone the repository:

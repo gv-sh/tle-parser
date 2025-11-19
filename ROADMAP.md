@@ -96,7 +96,7 @@ TLE parsers serve critical functions across multiple domains:
 - [x] Add bundle size monitoring and limits
 - [x] Generate separate builds for Node.js and browser
 - [x] Implement code splitting for optional features
-- [ ] Set up CDN distribution via jsDelivr or unpkg
+- [x] Set up CDN distribution via jsDelivr or unpkg
 - [x] Create lightweight core package with optional plugins
 
 ## Week 3: Enhanced Parsing & Validation
@@ -116,18 +116,18 @@ TLE parsers serve critical functions across multiple domains:
 - [x] Support parsing TLE variations from different providers
 
 ### Data Validation & Normalization
-- [ ] Implement epoch date validation and conversion
-- [ ] Add orbital parameter range validation
-- [ ] Validate checksum calculation and reporting
-- [ ] Normalize scientific notation in TLE fields
-- [ ] Add satellite number format validation (NORAD ID)
-- [ ] Validate international designator format
-- [ ] Implement anomaly detection for unusual orbital parameters
-- [ ] Add data quality scoring system
-- [ ] Create validation rule customization system
-- [ ] Implement field-level sanitization
-- [ ] Add support for validating future vs historical TLEs
-- [ ] Create validation report generation
+- [x] Implement epoch date validation and conversion
+- [x] Add orbital parameter range validation
+- [x] Validate checksum calculation and reporting
+- [x] Normalize scientific notation in TLE fields
+- [x] Add satellite number format validation (NORAD ID)
+- [x] Validate international designator format
+- [x] Implement anomaly detection for unusual orbital parameters
+- [x] Add data quality scoring system
+- [x] Create validation rule customization system
+- [x] Implement field-level sanitization
+- [x] Add support for validating future vs historical TLEs
+- [x] Create validation report generation
 
 ## Week 4: Output Formats & CLI
 
