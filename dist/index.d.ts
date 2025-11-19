@@ -16,6 +16,7 @@ export * from './cache';
 export * from './rateLimiter';
 export * from './constellations';
 export * from './scheduler';
+export * from './orbitalCalculations';
 /**
  * Custom error class for TLE validation errors
  * Thrown when TLE validation fails with detailed error information
