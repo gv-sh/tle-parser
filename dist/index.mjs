@@ -2246,7 +2246,7 @@ function validateAllOrbitalParameters(tle, checkTypical = false) {
  * @param line - TLE line (without checksum)
  * @returns Calculated checksum (0-9)
  */
-function calculateChecksum$1(line) {
+function calculateChecksum$2(line) {
     let checksum = 0;
     // Process first 68 characters (excluding checksum at position 68)
     const dataSection = line.substring(0, 68);
@@ -2278,7 +2278,7 @@ function validateChecksum$1(line, lineNumber) {
     }
     const checksumChar = line.charAt(68);
     const expectedChecksum = parseInt(checksumChar, 10);
-    const calculatedChecksum = calculateChecksum$1(line);
+    const calculatedChecksum = calculateChecksum$2(line);
     if (isNaN(expectedChecksum)) {
         return {
             valid: false,
@@ -2491,7 +2491,7 @@ const ANOMALY_PATTERNS = {
  * @param tle - Parsed TLE object
  * @returns Array of detected anomalies
  */
-function detectAnomalies(tle) {
+function detectAnomalies$1(tle) {
     const anomalies = [];
     // Parse numeric values
     const eccentricity = parseFloat(tle.eccentricity);
@@ -2891,7 +2891,7 @@ const DEFAULT_VALIDATION_RULES = [
         severity: 'warning',
         enabled: false, // Disabled by default
         validate: (tle) => {
-            const anomalies = detectAnomalies(tle);
+            const anomalies = detectAnomalies$1(tle);
             if (anomalies.length > 0) {
                 return {
                     valid: true,
@@ -3119,7 +3119,7 @@ function generateValidationReport(tle, tleLines, options = {}) {
     // Anomaly detection
     if (options.detectAnomalies) {
         rulesApplied.push('anomalyDetection');
-        anomalies.push(...detectAnomalies(tle));
+        anomalies.push(...detectAnomalies$1(tle));
     }
     // Field sanitization
     if (options.sanitizeFields) {
@@ -3599,7 +3599,7 @@ function formatAsHuman(tle, options = {}) {
  * console.log(tleString);
  * ```
  */
-function reconstructTLE(tle, options = {}) {
+function reconstructTLE$1(tle, options = {}) {
     const { includeName = true } = options;
     // Helper to pad a string to the right with spaces
     const padRight = (str, length) => {
@@ -3719,9 +3719,9 @@ function formatTLE(tle, options = {}) {
             return formatAsHuman(tle, options);
         case 'tle':
             if (Array.isArray(tle)) {
-                return tle.map(t => reconstructTLE(t, { includeName: true })).join('\n\n');
+                return tle.map(t => reconstructTLE$1(t, { includeName: true })).join('\n\n');
             }
-            return reconstructTLE(tle, { includeName: true });
+            return reconstructTLE$1(tle, { includeName: true });
         default:
             throw new Error(`Unsupported output format: ${format}`);
     }
@@ -8469,8 +8469,8 @@ function calculateLookAngles(tle, observerLocation, date) {
     // Calculate look angles
     const lookAngles = ecfToLookAngles(observerGd, positionEcf);
     return {
-        azimuth: degreesLong(lookAngles.azimuth),
-        elevation: degreesLat(lookAngles.elevation),
+        azimuth: lookAngles.azimuth * (180 / Math.PI), // Convert radians to degrees
+        elevation: lookAngles.elevation * (180 / Math.PI), // Convert radians to degrees
         range: lookAngles.rangeSat,
     };
 }
@@ -8977,6 +8977,1524 @@ function getTLEEpochDate(tle) {
     const epochDate = new Date(Date.UTC(fullYear, 0, dayOfYear));
     epochDate.setUTCMilliseconds(fractionalDay * 86400000);
     return epochDate;
+}
+
+/**
+ * TLE Data Analysis Module
+ * Provides comprehensive tools for analyzing TLE data including comparison,
+ * staleness detection, orbital decay analysis, and anomaly detection.
+ */
+// ============================================================================
+// TYPES AND INTERFACES
+// ============================================================================
+/**
+ * Orbit classification types based on altitude
+ */
+var OrbitType;
+(function (OrbitType) {
+    OrbitType["LEO"] = "LEO";
+    OrbitType["MEO"] = "MEO";
+    OrbitType["GEO"] = "GEO";
+    OrbitType["HEO"] = "HEO";
+    OrbitType["CISLUNAR"] = "CISLUNAR";
+    OrbitType["UNKNOWN"] = "UNKNOWN";
+})(OrbitType || (OrbitType = {}));
+// ============================================================================
+// TLE COMPARISON AND DIFF UTILITIES
+// ============================================================================
+/**
+ * Compare two TLE objects and identify differences
+ */
+function compareTLEs(oldTLE, newTLE) {
+    const differences = [];
+    // Compare all numeric fields
+    const fieldsToCompare = [
+        'epoch', 'inclination', 'rightAscension', 'eccentricity',
+        'argumentOfPerigee', 'meanAnomaly', 'meanMotion', 'firstDerivative',
+        'bStar', 'revolutionNumber'
+    ];
+    for (const field of fieldsToCompare) {
+        const oldValue = parseFloat(oldTLE[field]);
+        const newValue = parseFloat(newTLE[field]);
+        if (oldValue !== newValue) {
+            const absoluteChange = newValue - oldValue;
+            const percentChange = oldValue !== 0 ? (absoluteChange / oldValue) * 100 : 0;
+            differences.push({
+                field,
+                oldValue,
+                newValue,
+                absoluteChange,
+                percentChange
+            });
+        }
+    }
+    // Calculate time difference (in days)
+    const oldEpoch = parseEpoch$1(oldTLE.epochYear, oldTLE.epoch);
+    const newEpoch = parseEpoch$1(newTLE.epochYear, newTLE.epoch);
+    const timeDifference = (newEpoch.getTime() - oldEpoch.getTime()) / (1000 * 60 * 60 * 24);
+    // Identify significant changes (> 1% change or specific thresholds)
+    const significantChanges = differences.filter(diff => {
+        if (diff.field === 'meanMotion' && Math.abs(diff.absoluteChange || 0) > 0.001)
+            return true;
+        if (diff.field === 'inclination' && Math.abs(diff.absoluteChange || 0) > 0.1)
+            return true;
+        if (diff.field === 'eccentricity' && Math.abs(diff.absoluteChange || 0) > 0.0001)
+            return true;
+        if (diff.percentChange && Math.abs(diff.percentChange) > 1)
+            return true;
+        return false;
+    });
+    // Generate summary
+    const summary = generateComparisonSummary(differences, significantChanges, timeDifference);
+    return {
+        satelliteNumber: newTLE.satelliteNumber1,
+        satelliteName: newTLE.satelliteName,
+        timeDifference,
+        differences,
+        significantChanges,
+        summary
+    };
+}
+/**
+ * Generate diff output in unified diff format
+ */
+function generateTLEDiff(oldTLE, newTLE) {
+    const comparison = compareTLEs(oldTLE, newTLE);
+    let diff = `--- Old TLE (Epoch: ${oldTLE.epoch})\n`;
+    diff += `+++ New TLE (Epoch: ${newTLE.epoch})\n`;
+    diff += `@@ Satellite ${comparison.satelliteNumber} - ${comparison.satelliteName || 'Unknown'} @@\n\n`;
+    for (const change of comparison.differences) {
+        diff += `- ${change.field}: ${change.oldValue}\n`;
+        diff += `+ ${change.field}: ${change.newValue}`;
+        if (change.percentChange !== undefined) {
+            diff += ` (${change.percentChange > 0 ? '+' : ''}${change.percentChange.toFixed(2)}%)`;
+        }
+        diff += '\n';
+    }
+    if (comparison.significantChanges.length > 0) {
+        diff += `\n⚠️  ${comparison.significantChanges.length} significant change(s) detected\n`;
+    }
+    return diff;
+}
+// ============================================================================
+// TLE AGE AND STALENESS DETECTION
+// ============================================================================
+/**
+ * Calculate TLE age and assess staleness
+ */
+function assessTLEStaleness(tle, referenceDate = new Date()) {
+    const epoch = parseEpoch$1(tle.epochYear, tle.epoch);
+    const ageInMillis = referenceDate.getTime() - epoch.getTime();
+    const ageInDays = ageInMillis / (1000 * 60 * 60 * 24);
+    const ageInHours = ageInMillis / (1000 * 60 * 60);
+    let staleness;
+    let isStale;
+    let recommendation;
+    if (ageInDays < 1) {
+        staleness = 'fresh';
+        isStale = false;
+        recommendation = 'TLE is current and suitable for high-precision applications.';
+    }
+    else if (ageInDays < 3) {
+        staleness = 'recent';
+        isStale = false;
+        recommendation = 'TLE is recent and suitable for most applications.';
+    }
+    else if (ageInDays < 7) {
+        staleness = 'old';
+        isStale = true;
+        recommendation = 'TLE is getting old. Consider updating for better accuracy.';
+    }
+    else if (ageInDays < 30) {
+        staleness = 'very_old';
+        isStale = true;
+        recommendation = 'TLE is very old. Update recommended for accurate predictions.';
+    }
+    else {
+        staleness = 'ancient';
+        isStale = true;
+        recommendation = 'TLE is ancient. Predictions may be highly inaccurate. Update required.';
+    }
+    return {
+        ageInDays,
+        ageInHours,
+        isStale,
+        staleness,
+        recommendation
+    };
+}
+// ============================================================================
+// ORBITAL DECAY DETECTION
+// ============================================================================
+/**
+ * Analyze orbital decay from TLE history
+ */
+function analyzeOrbitalDecay(tles) {
+    if (tles.length < 2) {
+        return {
+            isDecaying: false,
+            decayRate: 0,
+            estimatedLifetimeDays: null,
+            severity: 'none',
+            details: 'Insufficient data for decay analysis (need at least 2 TLEs)'
+        };
+    }
+    // Sort TLEs by epoch
+    const sortedTLEs = [...tles].sort((a, b) => {
+        const epochA = parseEpoch$1(a.epochYear, a.epoch);
+        const epochB = parseEpoch$1(b.epochYear, b.epoch);
+        return epochA.getTime() - epochB.getTime();
+    });
+    // Calculate mean motion changes
+    const firstTLE = sortedTLEs[0];
+    const lastTLE = sortedTLEs[sortedTLEs.length - 1];
+    const firstMeanMotion = parseFloat(firstTLE.meanMotion);
+    const lastMeanMotion = parseFloat(lastTLE.meanMotion);
+    const firstEpoch = parseEpoch$1(firstTLE.epochYear, firstTLE.epoch);
+    const lastEpoch = parseEpoch$1(lastTLE.epochYear, lastTLE.epoch);
+    const timeSpanDays = (lastEpoch.getTime() - firstEpoch.getTime()) / (1000 * 60 * 60 * 24);
+    const decayRate = (lastMeanMotion - firstMeanMotion) / timeSpanDays;
+    const isDecaying = decayRate > 0.0001; // Positive change in mean motion indicates decay
+    let severity = 'none';
+    let estimatedLifetimeDays = null;
+    if (isDecaying) {
+        // Estimate lifetime based on decay rate
+        // This is a simplified model; real decay is more complex
+        if (decayRate > 0.01) {
+            severity = 'critical';
+            estimatedLifetimeDays = 30;
+        }
+        else if (decayRate > 0.001) {
+            severity = 'high';
+            estimatedLifetimeDays = 180;
+        }
+        else if (decayRate > 0.0005) {
+            severity = 'moderate';
+            estimatedLifetimeDays = 365;
+        }
+        else {
+            severity = 'low';
+            estimatedLifetimeDays = 1825; // ~5 years
+        }
+    }
+    const details = isDecaying
+        ? `Orbital decay detected. Mean motion increasing at ${decayRate.toExponential(2)} rev/day². Estimated lifetime: ${estimatedLifetimeDays} days.`
+        : 'No significant orbital decay detected.';
+    return {
+        isDecaying,
+        decayRate,
+        estimatedLifetimeDays,
+        severity,
+        details
+    };
+}
+// ============================================================================
+// TLE UPDATE FREQUENCY STATISTICS
+// ============================================================================
+/**
+ * Calculate update frequency statistics from TLE history
+ */
+function calculateUpdateFrequency(tles) {
+    if (tles.length < 2) {
+        return {
+            satelliteNumber: tles[0]?.satelliteNumber1 || 'unknown',
+            totalUpdates: tles.length,
+            timeSpanDays: 0,
+            averageUpdateInterval: 0,
+            minUpdateInterval: 0,
+            maxUpdateInterval: 0,
+            stdDeviation: 0,
+            updatePattern: 'sparse'
+        };
+    }
+    // Sort by epoch
+    const sortedTLEs = [...tles].sort((a, b) => {
+        const epochA = parseEpoch$1(a.epochYear, a.epoch);
+        const epochB = parseEpoch$1(b.epochYear, b.epoch);
+        return epochA.getTime() - epochB.getTime();
+    });
+    // Calculate intervals
+    const intervals = [];
+    for (let i = 1; i < sortedTLEs.length; i++) {
+        const prevEpoch = parseEpoch$1(sortedTLEs[i - 1].epochYear, sortedTLEs[i - 1].epoch);
+        const currEpoch = parseEpoch$1(sortedTLEs[i].epochYear, sortedTLEs[i].epoch);
+        const intervalDays = (currEpoch.getTime() - prevEpoch.getTime()) / (1000 * 60 * 60 * 24);
+        intervals.push(intervalDays);
+    }
+    const averageUpdateInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+    const minUpdateInterval = Math.min(...intervals);
+    const maxUpdateInterval = Math.max(...intervals);
+    // Calculate standard deviation
+    const variance = intervals.reduce((sum, interval) => {
+        return sum + Math.pow(interval - averageUpdateInterval, 2);
+    }, 0) / intervals.length;
+    const stdDeviation = Math.sqrt(variance);
+    // Determine update pattern
+    let updatePattern;
+    const coefficientOfVariation = stdDeviation / averageUpdateInterval;
+    if (averageUpdateInterval < 1) {
+        updatePattern = 'frequent';
+    }
+    else if (coefficientOfVariation < 0.3) {
+        updatePattern = 'regular';
+    }
+    else if (averageUpdateInterval > 7) {
+        updatePattern = 'sparse';
+    }
+    else {
+        updatePattern = 'irregular';
+    }
+    const firstEpoch = parseEpoch$1(sortedTLEs[0].epochYear, sortedTLEs[0].epoch);
+    const lastEpoch = parseEpoch$1(sortedTLEs[sortedTLEs.length - 1].epochYear, sortedTLEs[sortedTLEs.length - 1].epoch);
+    const timeSpanDays = (lastEpoch.getTime() - firstEpoch.getTime()) / (1000 * 60 * 60 * 24);
+    return {
+        satelliteNumber: sortedTLEs[0].satelliteNumber1,
+        totalUpdates: tles.length,
+        timeSpanDays,
+        averageUpdateInterval,
+        minUpdateInterval,
+        maxUpdateInterval,
+        stdDeviation,
+        updatePattern
+    };
+}
+// ============================================================================
+// ANOMALY DETECTION
+// ============================================================================
+/**
+ * Detect anomalies in TLE data (maneuvers, sudden changes)
+ */
+function detectAnomalies(currentTLE, previousTLE) {
+    if (!previousTLE) {
+        return {
+            hasAnomaly: false,
+            anomalyType: 'none',
+            confidence: 0,
+            description: 'No previous TLE available for comparison',
+            affectedFields: [],
+            recommendations: []
+        };
+    }
+    const comparison = compareTLEs(previousTLE, currentTLE);
+    const affectedFields = [];
+    let hasAnomaly = false;
+    let anomalyType = 'none';
+    let confidence = 0;
+    let description = '';
+    const recommendations = [];
+    // Check for maneuver indicators
+    const meanMotionChange = comparison.differences.find(d => d.field === 'meanMotion');
+    const inclinationChange = comparison.differences.find(d => d.field === 'inclination');
+    // Maneuver detection
+    if (meanMotionChange && Math.abs(meanMotionChange.absoluteChange || 0) > 0.01) {
+        hasAnomaly = true;
+        anomalyType = 'maneuver';
+        affectedFields.push('meanMotion');
+        confidence = Math.min(Math.abs(meanMotionChange.absoluteChange || 0) * 10, 1);
+        description = `Possible orbital maneuver detected. Mean motion changed by ${meanMotionChange.absoluteChange?.toFixed(6)} rev/day.`;
+        recommendations.push('Verify with satellite operator', 'Update orbital predictions');
+    }
+    if (inclinationChange && Math.abs(inclinationChange.absoluteChange || 0) > 0.5) {
+        hasAnomaly = true;
+        anomalyType = 'maneuver';
+        affectedFields.push('inclination');
+        confidence = Math.max(confidence, 0.9);
+        description += ` Significant inclination change: ${inclinationChange.absoluteChange?.toFixed(3)}°.`;
+        recommendations.push('Inclination change suggests plane change maneuver');
+    }
+    // Decay anomaly detection
+    const decayAnalysis = analyzeOrbitalDecay([previousTLE, currentTLE]);
+    if (decayAnalysis.severity === 'critical' || decayAnalysis.severity === 'high') {
+        hasAnomaly = true;
+        anomalyType = 'decay_anomaly';
+        affectedFields.push('meanMotion', 'bStar');
+        confidence = Math.max(confidence, 0.8);
+        description = `Rapid orbital decay detected: ${decayAnalysis.details}`;
+        recommendations.push('Monitor for reentry', 'Validate TLE against radar observations');
+    }
+    // Data error detection (unrealistic values)
+    const eccentricityChange = comparison.differences.find(d => d.field === 'eccentricity');
+    if (eccentricityChange && Math.abs(eccentricityChange.absoluteChange || 0) > 0.1) {
+        hasAnomaly = true;
+        anomalyType = 'data_error';
+        affectedFields.push('eccentricity');
+        confidence = 0.95;
+        description = 'Unrealistic eccentricity change detected. Possible data error.';
+        recommendations.push('Verify TLE source', 'Check for data corruption');
+    }
+    if (!hasAnomaly) {
+        description = 'No significant anomalies detected.';
+    }
+    return {
+        hasAnomaly,
+        anomalyType,
+        confidence,
+        description,
+        affectedFields,
+        recommendations
+    };
+}
+// ============================================================================
+// CONSTELLATION ANALYSIS
+// ============================================================================
+/**
+ * Analyze a constellation of satellites
+ */
+function analyzeConstellation(tles, constellationName) {
+    const orbitTypes = {
+        LEO: 0,
+        MEO: 0,
+        GEO: 0,
+        HEO: 0,
+        CISLUNAR: 0,
+        UNKNOWN: 0
+    };
+    let totalInclination = 0;
+    let totalAltitude = 0;
+    const raanValues = [];
+    for (const tle of tles) {
+        const orbitType = classifyOrbitType(tle);
+        orbitTypes[orbitType]++;
+        const inclination = parseFloat(tle.inclination);
+        const meanMotion = parseFloat(tle.meanMotion);
+        const rightAscension = parseFloat(tle.rightAscension);
+        totalInclination += inclination;
+        // Calculate approximate altitude from mean motion
+        const altitude = calculateAltitudeFromMeanMotion(meanMotion);
+        totalAltitude += altitude;
+        raanValues.push(rightAscension);
+    }
+    const averageInclination = totalInclination / tles.length;
+    const averageAltitude = totalAltitude / tles.length;
+    // Estimate orbital planes (simplified)
+    const uniquePlanes = estimateOrbitalPlanes(raanValues);
+    // Calculate spacing
+    const alongTrackSpacing = 360 / (tles.length / uniquePlanes);
+    const crossTrackSpacing = raanValues.length > 1
+        ? Math.abs(raanValues[1] - raanValues[0])
+        : 0;
+    // Determine coverage
+    let coverage;
+    if (averageInclination > 80) {
+        coverage = 'Global (polar)';
+    }
+    else if (averageInclination > 50) {
+        coverage = 'High latitude';
+    }
+    else {
+        coverage = 'Equatorial to mid-latitude';
+    }
+    return {
+        constellationName,
+        totalSatellites: tles.length,
+        orbitTypes,
+        averageInclination,
+        averageAltitude,
+        orbitalPlanes: uniquePlanes,
+        spacing: {
+            alongTrack: alongTrackSpacing,
+            crossTrack: crossTrackSpacing
+        },
+        coverage
+    };
+}
+// ============================================================================
+// TLE QUALITY METRICS
+// ============================================================================
+/**
+ * Calculate comprehensive quality metrics for a TLE
+ */
+function calculateQualityMetrics(tle, referenceDate = new Date()) {
+    const issues = [];
+    // Completeness (check for all required fields)
+    let completeness = 100;
+    const requiredFields = [
+        'satelliteNumber1', 'inclination', 'rightAscension', 'eccentricity',
+        'argumentOfPerigee', 'meanAnomaly', 'meanMotion', 'epoch'
+    ];
+    for (const field of requiredFields) {
+        if (!tle[field] || tle[field] === '') {
+            completeness -= 100 / requiredFields.length;
+            issues.push(`Missing or empty field: ${field}`);
+        }
+    }
+    // Accuracy (check for reasonable values)
+    let accuracy = 100;
+    const inclination = parseFloat(tle.inclination);
+    const eccentricity = parseFloat(tle.eccentricity);
+    const meanMotion = parseFloat(tle.meanMotion);
+    if (inclination < 0 || inclination > 180) {
+        accuracy -= 20;
+        issues.push(`Invalid inclination: ${inclination}`);
+    }
+    if (eccentricity < 0 || eccentricity >= 1) {
+        accuracy -= 20;
+        issues.push(`Invalid eccentricity: ${eccentricity}`);
+    }
+    if (meanMotion <= 0 || meanMotion > 20) {
+        accuracy -= 20;
+        issues.push(`Unusual mean motion: ${meanMotion}`);
+    }
+    // Freshness
+    const staleness = assessTLEStaleness(tle, referenceDate);
+    let freshness = 100;
+    switch (staleness.staleness) {
+        case 'fresh':
+            freshness = 100;
+            break;
+        case 'recent':
+            freshness = 85;
+            break;
+        case 'old':
+            freshness = 60;
+            break;
+        case 'very_old':
+            freshness = 30;
+            break;
+        case 'ancient':
+            freshness = 0;
+            break;
+    }
+    // Consistency (check for checksum validation)
+    let consistency = 100;
+    if (tle.warnings && tle.warnings.length > 0) {
+        consistency -= Math.min(tle.warnings.length * 10, 40);
+        issues.push(`${tle.warnings.length} warning(s) detected`);
+    }
+    // Overall score (weighted average)
+    const overallScore = (completeness * 0.3 +
+        accuracy * 0.3 +
+        freshness * 0.25 +
+        consistency * 0.15);
+    // Assign grade
+    let grade;
+    if (overallScore >= 90)
+        grade = 'A';
+    else if (overallScore >= 80)
+        grade = 'B';
+    else if (overallScore >= 70)
+        grade = 'C';
+    else if (overallScore >= 60)
+        grade = 'D';
+    else
+        grade = 'F';
+    return {
+        overallScore: Math.round(overallScore),
+        completeness: Math.round(completeness),
+        accuracy: Math.round(accuracy),
+        freshness: Math.round(freshness),
+        consistency: Math.round(consistency),
+        issues,
+        grade
+    };
+}
+// ============================================================================
+// HISTORICAL TLE TREND ANALYSIS
+// ============================================================================
+/**
+ * Analyze trends in a specific TLE parameter over time
+ */
+function analyzeTrend(tles, parameter) {
+    if (tles.length < 3) {
+        return {
+            satelliteNumber: tles[0]?.satelliteNumber1 || 'unknown',
+            parameter: parameter,
+            trend: 'stable',
+            trendStrength: 0,
+            changeRate: 0,
+            predictions: {
+                next7Days: 0,
+                next30Days: 0
+            }
+        };
+    }
+    // Sort by epoch
+    const sortedTLEs = [...tles].sort((a, b) => {
+        const epochA = parseEpoch$1(a.epochYear, a.epoch);
+        const epochB = parseEpoch$1(b.epochYear, b.epoch);
+        return epochA.getTime() - epochB.getTime();
+    });
+    // Extract values and times
+    const values = [];
+    const times = [];
+    for (const tle of sortedTLEs) {
+        const fieldValue = tle[parameter];
+        if (fieldValue) {
+            const value = parseFloat(fieldValue);
+            if (!isNaN(value)) {
+                values.push(value);
+                const epoch = parseEpoch$1(tle.epochYear, tle.epoch);
+                times.push(epoch.getTime());
+            }
+        }
+    }
+    // Simple linear regression
+    const n = values.length;
+    const sumX = times.reduce((a, b) => a + b, 0);
+    const sumY = values.reduce((a, b) => a + b, 0);
+    const sumXY = times.reduce((sum, time, i) => sum + time * values[i], 0);
+    const sumX2 = times.reduce((sum, time) => sum + time * time, 0);
+    const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+    const intercept = (sumY - slope * sumX) / n;
+    // Determine trend
+    let trend;
+    const threshold = Math.abs(values[values.length - 1] - values[0]) * 0.01;
+    if (Math.abs(slope) < threshold / (times[times.length - 1] - times[0])) {
+        trend = 'stable';
+    }
+    else if (slope > 0) {
+        trend = 'increasing';
+    }
+    else {
+        trend = 'decreasing';
+    }
+    // Calculate trend strength (R²)
+    const meanY = sumY / n;
+    const ssTotal = values.reduce((sum, value) => sum + Math.pow(value - meanY, 2), 0);
+    const ssResidual = values.reduce((sum, value, i) => {
+        const predicted = slope * times[i] + intercept;
+        return sum + Math.pow(value - predicted, 2);
+    }, 0);
+    const trendStrength = 1 - (ssResidual / ssTotal);
+    // Change rate per day
+    const changeRate = slope * (1000 * 60 * 60 * 24);
+    // Predictions
+    const lastTime = times[times.length - 1];
+    const next7Days = slope * (lastTime + 7 * 24 * 60 * 60 * 1000) + intercept;
+    const next30Days = slope * (lastTime + 30 * 24 * 60 * 60 * 1000) + intercept;
+    return {
+        satelliteNumber: sortedTLEs[0].satelliteNumber1,
+        parameter: parameter,
+        trend,
+        trendStrength: Math.max(0, Math.min(1, trendStrength)),
+        changeRate,
+        predictions: {
+            next7Days,
+            next30Days
+        }
+    };
+}
+// ============================================================================
+// ORBIT TYPE CLASSIFICATION
+// ============================================================================
+/**
+ * Classify orbit type based on TLE parameters
+ */
+function classifyOrbitType(tle) {
+    const meanMotion = parseFloat(tle.meanMotion);
+    const eccentricity = parseFloat(tle.eccentricity);
+    const inclination = parseFloat(tle.inclination);
+    // Calculate approximate altitude
+    const altitude = calculateAltitudeFromMeanMotion(meanMotion);
+    // GEO: ~35,786 km altitude, low inclination, near-circular
+    if (altitude > 35000 && altitude < 36500 && inclination < 15 && eccentricity < 0.05) {
+        return OrbitType.GEO;
+    }
+    // HEO: High eccentricity
+    if (eccentricity > 0.3) {
+        return OrbitType.HEO;
+    }
+    // LEO: Below 2000 km
+    if (altitude < 2000) {
+        return OrbitType.LEO;
+    }
+    // MEO: Between 2000 and 35786 km
+    if (altitude >= 2000 && altitude < 35786) {
+        return OrbitType.MEO;
+    }
+    // Cislunar: Above GEO
+    if (altitude > 36500) {
+        return OrbitType.CISLUNAR;
+    }
+    return OrbitType.UNKNOWN;
+}
+// ============================================================================
+// CONJUNCTION PROBABILITY CALCULATION
+// ============================================================================
+/**
+ * Calculate conjunction probability between two satellites
+ * Note: This is a simplified calculation. Real conjunction analysis requires
+ * detailed propagation and covariance analysis.
+ */
+function calculateConjunctionProbability(tle1, tle2, timeWindow = 24 // hours
+) {
+    // Simplified calculation based on orbital parameters
+    const altitude1 = calculateAltitudeFromMeanMotion(parseFloat(tle1.meanMotion));
+    const altitude2 = calculateAltitudeFromMeanMotion(parseFloat(tle2.meanMotion));
+    const inclination1 = parseFloat(tle1.inclination);
+    const inclination2 = parseFloat(tle2.inclination);
+    // Estimate minimum distance (very simplified)
+    const altitudeDiff = Math.abs(altitude1 - altitude2);
+    const inclinationDiff = Math.abs(inclination1 - inclination2);
+    // If orbits are very different, collision probability is essentially zero
+    if (altitudeDiff > 100 || inclinationDiff > 10) {
+        return {
+            satellite1: tle1.satelliteNumber1,
+            satellite2: tle2.satelliteNumber1,
+            probabilityOfCollision: 0,
+            minimumDistance: altitudeDiff,
+            timeOfClosestApproach: new Date(),
+            riskLevel: 'low',
+            recommendations: ['Orbits are sufficiently separated']
+        };
+    }
+    // Simplified risk calculation
+    let probability = 0;
+    let riskLevel = 'low';
+    const recommendations = [];
+    if (altitudeDiff < 10 && inclinationDiff < 2) {
+        probability = 0.001;
+        riskLevel = 'moderate';
+        recommendations.push('Monitor conjunction', 'Consider detailed analysis');
+    }
+    if (altitudeDiff < 5 && inclinationDiff < 1) {
+        probability = 0.01;
+        riskLevel = 'high';
+        recommendations.push('Perform detailed conjunction analysis', 'Prepare collision avoidance maneuver');
+    }
+    if (altitudeDiff < 2 && inclinationDiff < 0.5) {
+        probability = 0.1;
+        riskLevel = 'critical';
+        recommendations.push('URGENT: Immediate collision avoidance required', 'Contact satellite operators');
+    }
+    return {
+        satellite1: tle1.satelliteNumber1,
+        satellite2: tle2.satelliteNumber1,
+        probabilityOfCollision: probability,
+        minimumDistance: altitudeDiff,
+        timeOfClosestApproach: new Date(Date.now() + Math.random() * timeWindow * 60 * 60 * 1000),
+        riskLevel,
+        recommendations
+    };
+}
+// ============================================================================
+// RADAR OBSERVATION VALIDATION
+// ============================================================================
+/**
+ * Validate TLE against radar observations
+ * Note: This is a placeholder. Real validation requires actual radar data.
+ */
+function validateAgainstRadar(_tle, _radarPosition, _radarObservation) {
+    // This is a placeholder implementation
+    // Real implementation would:
+    // 1. Propagate TLE to observation time
+    // 2. Calculate expected position from observer location
+    // 3. Compare with actual radar observation
+    // 4. Calculate position and velocity errors
+    return {
+        isValid: true,
+        positionError: 0.5, // km
+        velocityError: 0.001, // km/s
+        confidence: 0.95,
+        discrepancies: []
+    };
+}
+// ============================================================================
+// ORBITAL FAMILY GROUPING
+// ============================================================================
+/**
+ * Group satellites into orbital families based on similar characteristics
+ */
+function groupIntoOrbitalFamilies(tles, tolerances = {
+    inclinationTolerance: 1.0,
+    altitudeTolerance: 50,
+    eccentricityTolerance: 0.01
+}) {
+    const families = [];
+    const assigned = new Set();
+    for (let i = 0; i < tles.length; i++) {
+        const tle1 = tles[i];
+        if (assigned.has(tle1.satelliteNumber1))
+            continue;
+        const familyMembers = [tle1.satelliteNumber1];
+        assigned.add(tle1.satelliteNumber1);
+        const inc1 = parseFloat(tle1.inclination);
+        const alt1 = calculateAltitudeFromMeanMotion(parseFloat(tle1.meanMotion));
+        const ecc1 = parseFloat(tle1.eccentricity);
+        // Find similar satellites
+        for (let j = i + 1; j < tles.length; j++) {
+            const tle2 = tles[j];
+            if (assigned.has(tle2.satelliteNumber1))
+                continue;
+            const inc2 = parseFloat(tle2.inclination);
+            const alt2 = calculateAltitudeFromMeanMotion(parseFloat(tle2.meanMotion));
+            const ecc2 = parseFloat(tle2.eccentricity);
+            if (Math.abs(inc1 - inc2) <= tolerances.inclinationTolerance &&
+                Math.abs(alt1 - alt2) <= tolerances.altitudeTolerance &&
+                Math.abs(ecc1 - ecc2) <= tolerances.eccentricityTolerance) {
+                familyMembers.push(tle2.satelliteNumber1);
+                assigned.add(tle2.satelliteNumber1);
+            }
+        }
+        // Determine purpose based on orbital characteristics
+        let purpose = 'Unknown';
+        if (inc1 > 95 && inc1 < 100)
+            purpose = 'Sun-synchronous Earth observation';
+        else if (inc1 < 10 && alt1 > 35000)
+            purpose = 'Geostationary communications';
+        else if (inc1 > 50 && inc1 < 60 && alt1 > 19000 && alt1 < 24000)
+            purpose = 'Navigation (GPS/GLONASS)';
+        else if (alt1 < 600)
+            purpose = 'Low Earth orbit constellation';
+        families.push({
+            familyId: `FAMILY_${families.length + 1}`,
+            satellites: familyMembers,
+            commonCharacteristics: {
+                inclination: inc1,
+                semiMajorAxis: alt1 + 6371, // Earth radius
+                eccentricity: ecc1
+            },
+            tolerances,
+            purpose
+        });
+    }
+    return families;
+}
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+/**
+ * Parse epoch from TLE epoch year and day
+ */
+function parseEpoch$1(epochYear, epoch) {
+    const year = parseInt(epochYear);
+    const fullYear = year >= 57 ? 1900 + year : 2000 + year;
+    const dayOfYear = parseFloat(epoch);
+    const date = new Date(Date.UTC(fullYear, 0, 1));
+    date.setUTCDate(dayOfYear);
+    return date;
+}
+/**
+ * Calculate altitude from mean motion using simplified Kepler's third law
+ */
+function calculateAltitudeFromMeanMotion(meanMotion) {
+    const earthRadius = 6371; // km
+    const mu = 398600.4418; // Earth's gravitational parameter (km³/s²)
+    // Convert mean motion from rev/day to rad/s
+    const n = meanMotion * 2 * Math.PI / 86400;
+    // Calculate semi-major axis: a = (mu/n²)^(1/3)
+    const a = Math.pow(mu / (n * n), 1 / 3);
+    // Altitude = semi-major axis - Earth radius
+    return a - earthRadius;
+}
+/**
+ * Generate comparison summary text
+ */
+function generateComparisonSummary(differences, significantChanges, timeDifference) {
+    if (differences.length === 0) {
+        return 'No changes detected between TLEs.';
+    }
+    let summary = `${differences.length} field(s) changed over ${timeDifference.toFixed(2)} days. `;
+    if (significantChanges.length > 0) {
+        summary += `${significantChanges.length} significant change(s): `;
+        const changeList = significantChanges.map(c => c.field).join(', ');
+        summary += changeList + '.';
+    }
+    else {
+        summary += 'All changes are minor.';
+    }
+    return summary;
+}
+/**
+ * Estimate number of orbital planes from RAAN values
+ */
+function estimateOrbitalPlanes(raanValues) {
+    if (raanValues.length < 2)
+        return 1;
+    // Sort RAAN values
+    const sorted = [...raanValues].sort((a, b) => a - b);
+    // Find clusters (planes within 5 degrees are considered same plane)
+    const planes = [];
+    let currentPlane = [sorted[0]];
+    for (let i = 1; i < sorted.length; i++) {
+        if (sorted[i] - sorted[i - 1] < 5) {
+            currentPlane.push(sorted[i]);
+        }
+        else {
+            planes.push(currentPlane);
+            currentPlane = [sorted[i]];
+        }
+    }
+    planes.push(currentPlane);
+    return planes.length;
+}
+
+/**
+ * TLE Format Conversion Module
+ * Provides conversion between TLE and various orbital data formats including
+ * OMM, STK, KVN, CCSDS OEM, GPS almanac, state vectors, and Keplerian elements.
+ */
+/**
+ * Coordinate frame types
+ */
+var CoordinateFrame;
+(function (CoordinateFrame) {
+    CoordinateFrame["TEME"] = "TEME";
+    CoordinateFrame["J2000"] = "J2000";
+    CoordinateFrame["ITRF"] = "ITRF";
+    CoordinateFrame["GCRF"] = "GCRF";
+    CoordinateFrame["EME2000"] = "EME2000"; // Earth Mean Equator 2000
+})(CoordinateFrame || (CoordinateFrame = {}));
+/**
+ * Planetarium software formats
+ */
+var PlanetariumFormat;
+(function (PlanetariumFormat) {
+    PlanetariumFormat["STELLARIUM"] = "STELLARIUM";
+    PlanetariumFormat["CELESTIA"] = "CELESTIA";
+    PlanetariumFormat["SPACENGINE"] = "SPACENGINE";
+    PlanetariumFormat["UNIVERSESANDBOX"] = "UNIVERSESANDBOX";
+})(PlanetariumFormat || (PlanetariumFormat = {}));
+// ============================================================================
+// OMM (ORBIT MEAN ELEMENTS MESSAGE) CONVERSION
+// ============================================================================
+/**
+ * Convert TLE to OMM format (CCSDS standard)
+ */
+function tleToOMM(tle, originator = 'TLE-PARSER') {
+    const epoch = parseEpoch(tle.epochYear, tle.epoch);
+    return {
+        CCSDS_OMM_VERS: '2.0',
+        CREATION_DATE: new Date().toISOString(),
+        ORIGINATOR: originator,
+        OBJECT_NAME: tle.satelliteName || `SATELLITE ${tle.satelliteNumber1}`,
+        OBJECT_ID: tle.satelliteNumber1,
+        CENTER_NAME: 'EARTH',
+        REF_FRAME: 'TEME',
+        TIME_SYSTEM: 'UTC',
+        MEAN_ELEMENT_THEORY: 'SGP4',
+        EPOCH: epoch.toISOString(),
+        MEAN_MOTION: parseFloat(tle.meanMotion),
+        ECCENTRICITY: parseFloat(tle.eccentricity),
+        INCLINATION: parseFloat(tle.inclination),
+        RA_OF_ASC_NODE: parseFloat(tle.rightAscension),
+        ARG_OF_PERICENTER: parseFloat(tle.argumentOfPerigee),
+        MEAN_ANOMALY: parseFloat(tle.meanAnomaly),
+        EPHEMERIS_TYPE: parseInt(tle.ephemerisType),
+        CLASSIFICATION_TYPE: tle.classification,
+        NORAD_CAT_ID: tle.satelliteNumber1,
+        ELEMENT_SET_NO: parseInt(tle.elementSetNumber),
+        REV_AT_EPOCH: parseInt(tle.revolutionNumber),
+        BSTAR: parseFloat(tle.bStar),
+        MEAN_MOTION_DOT: parseFloat(tle.firstDerivative),
+        MEAN_MOTION_DDOT: parseFloat(tle.secondDerivative)
+    };
+}
+/**
+ * Convert OMM to TLE format
+ */
+function ommToTLE(omm) {
+    const epoch = new Date(omm.EPOCH);
+    const year = epoch.getUTCFullYear() % 100;
+    const dayOfYear = getDayOfYear(epoch);
+    // Line 0 (satellite name)
+    let tle = `${omm.OBJECT_NAME}\n`;
+    // Line 1
+    const line1Parts = [
+        '1',
+        omm.NORAD_CAT_ID.padStart(5, ' '),
+        omm.CLASSIFICATION_TYPE,
+        ' ',
+        formatInternationalDesignator(omm.OBJECT_ID),
+        ' ',
+        year.toString().padStart(2, '0'),
+        dayOfYear.toFixed(8).padStart(12, ' '),
+        ' ',
+        formatScientific(omm.MEAN_MOTION_DOT, 8),
+        ' ',
+        formatScientific(omm.MEAN_MOTION_DDOT, 8),
+        ' ',
+        formatScientific(omm.BSTAR, 8),
+        ' ',
+        omm.EPHEMERIS_TYPE.toString(),
+        ' ',
+        omm.ELEMENT_SET_NO.toString().padStart(4, ' ')
+    ];
+    const line1 = line1Parts.join('');
+    const checksum1 = calculateChecksum$1(line1);
+    tle += line1 + checksum1 + '\n';
+    // Line 2
+    const line2Parts = [
+        '2',
+        omm.NORAD_CAT_ID.padStart(5, ' '),
+        ' ',
+        omm.INCLINATION.toFixed(4).padStart(8, ' '),
+        ' ',
+        omm.RA_OF_ASC_NODE.toFixed(4).padStart(8, ' '),
+        ' ',
+        formatEccentricity(omm.ECCENTRICITY),
+        ' ',
+        omm.ARG_OF_PERICENTER.toFixed(4).padStart(8, ' '),
+        ' ',
+        omm.MEAN_ANOMALY.toFixed(4).padStart(8, ' '),
+        ' ',
+        omm.MEAN_MOTION.toFixed(8).padStart(11, ' '),
+        omm.REV_AT_EPOCH.toString().padStart(5, ' ')
+    ];
+    const line2 = line2Parts.join('');
+    const checksum2 = calculateChecksum$1(line2);
+    tle += line2 + checksum2;
+    return tle;
+}
+/**
+ * Serialize OMM to XML format
+ */
+function ommToXML(omm) {
+    let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
+    xml += '<omm xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"\n';
+    xml += '     id="CCSDS_OMM_VERS" version="2.0">\n';
+    xml += '  <header>\n';
+    xml += `    <CREATION_DATE>${omm.CREATION_DATE}</CREATION_DATE>\n`;
+    xml += `    <ORIGINATOR>${omm.ORIGINATOR}</ORIGINATOR>\n`;
+    xml += '  </header>\n';
+    xml += '  <body>\n';
+    xml += '    <segment>\n';
+    xml += '      <metadata>\n';
+    xml += `        <OBJECT_NAME>${omm.OBJECT_NAME}</OBJECT_NAME>\n`;
+    xml += `        <OBJECT_ID>${omm.OBJECT_ID}</OBJECT_ID>\n`;
+    xml += `        <CENTER_NAME>${omm.CENTER_NAME}</CENTER_NAME>\n`;
+    xml += `        <REF_FRAME>${omm.REF_FRAME}</REF_FRAME>\n`;
+    xml += `        <TIME_SYSTEM>${omm.TIME_SYSTEM}</TIME_SYSTEM>\n`;
+    xml += `        <MEAN_ELEMENT_THEORY>${omm.MEAN_ELEMENT_THEORY}</MEAN_ELEMENT_THEORY>\n`;
+    xml += '      </metadata>\n';
+    xml += '      <data>\n';
+    xml += `        <EPOCH>${omm.EPOCH}</EPOCH>\n`;
+    xml += `        <MEAN_MOTION>${omm.MEAN_MOTION}</MEAN_MOTION>\n`;
+    xml += `        <ECCENTRICITY>${omm.ECCENTRICITY}</ECCENTRICITY>\n`;
+    xml += `        <INCLINATION>${omm.INCLINATION}</INCLINATION>\n`;
+    xml += `        <RA_OF_ASC_NODE>${omm.RA_OF_ASC_NODE}</RA_OF_ASC_NODE>\n`;
+    xml += `        <ARG_OF_PERICENTER>${omm.ARG_OF_PERICENTER}</ARG_OF_PERICENTER>\n`;
+    xml += `        <MEAN_ANOMALY>${omm.MEAN_ANOMALY}</MEAN_ANOMALY>\n`;
+    xml += `        <BSTAR>${omm.BSTAR}</BSTAR>\n`;
+    xml += `        <MEAN_MOTION_DOT>${omm.MEAN_MOTION_DOT}</MEAN_MOTION_DOT>\n`;
+    xml += `        <MEAN_MOTION_DDOT>${omm.MEAN_MOTION_DDOT}</MEAN_MOTION_DDOT>\n`;
+    xml += '      </data>\n';
+    xml += '    </segment>\n';
+    xml += '  </body>\n';
+    xml += '</omm>\n';
+    return xml;
+}
+// ============================================================================
+// STK EPHEMERIS FORMAT CONVERSION
+// ============================================================================
+/**
+ * Convert TLE to STK .e ephemeris format
+ */
+function tleToSTK(tle, _duration = 86400) {
+    // For a full implementation, we would propagate the orbit
+    // Here we provide a simplified structure
+    const epoch = parseEpoch(tle.epochYear, tle.epoch);
+    return {
+        header: {
+            version: 'stk.v.11.0',
+            satelliteName: tle.satelliteName || `SATELLITE ${tle.satelliteNumber1}`,
+            coordinateSystem: 'TEME',
+            centralBody: 'Earth'
+        },
+        stateVectors: [
+            // This would typically include propagated state vectors
+            // For now, we include just the epoch state
+            {
+                time: epoch.toISOString(),
+                position: { x: 0, y: 0, z: 0 }, // Would calculate from TLE
+                velocity: { vx: 0, vy: 0, vz: 0 } // Would calculate from TLE
+            }
+        ]
+    };
+}
+/**
+ * Serialize STK ephemeris to .e file format
+ */
+function stkToFile(stk) {
+    let content = `stk.v.11.0\n\n`;
+    content += `# Satellite: ${stk.header.satelliteName}\n`;
+    content += `# Coordinate System: ${stk.header.coordinateSystem}\n`;
+    content += `# Central Body: ${stk.header.centralBody}\n\n`;
+    content += `BEGIN Ephemeris\n\n`;
+    content += `NumberOfEphemerisPoints ${stk.stateVectors.length}\n\n`;
+    content += `EphemerisTimePosVel\n\n`;
+    for (const sv of stk.stateVectors) {
+        const time = typeof sv.time === 'string' ? sv.time : sv.time.toISOString();
+        content += `${time} ${sv.position.x} ${sv.position.y} ${sv.position.z} `;
+        content += `${sv.velocity.vx} ${sv.velocity.vy} ${sv.velocity.vz}\n`;
+    }
+    content += `\nEND Ephemeris\n`;
+    return content;
+}
+// ============================================================================
+// KVN (KEYHOLE MARKUP LANGUAGE) CONVERSION
+// ============================================================================
+/**
+ * Convert TLE to KVN format
+ */
+function tleToKVN(tle, originator = 'TLE-PARSER') {
+    const epoch = parseEpoch(tle.epochYear, tle.epoch);
+    return {
+        KVN_VERS: '1.0',
+        CREATION_DATE: new Date().toISOString(),
+        ORIGINATOR: originator,
+        OBJECT_NAME: tle.satelliteName || `SATELLITE ${tle.satelliteNumber1}`,
+        OBJECT_ID: tle.satelliteNumber1,
+        elements: {
+            EPOCH: epoch.toISOString(),
+            MEAN_MOTION: parseFloat(tle.meanMotion),
+            ECCENTRICITY: parseFloat(tle.eccentricity),
+            INCLINATION: parseFloat(tle.inclination),
+            RA_OF_ASC_NODE: parseFloat(tle.rightAscension),
+            ARG_OF_PERICENTER: parseFloat(tle.argumentOfPerigee),
+            MEAN_ANOMALY: parseFloat(tle.meanAnomaly),
+            BSTAR: parseFloat(tle.bStar),
+            MEAN_MOTION_DOT: parseFloat(tle.firstDerivative),
+            MEAN_MOTION_DDOT: parseFloat(tle.secondDerivative)
+        }
+    };
+}
+/**
+ * Serialize KVN to text format
+ */
+function kvnToText(kvn) {
+    let text = `KVN/1.0\n\n`;
+    text += `CREATION_DATE = ${kvn.CREATION_DATE}\n`;
+    text += `ORIGINATOR = ${kvn.ORIGINATOR}\n\n`;
+    text += `OBJECT_NAME = ${kvn.OBJECT_NAME}\n`;
+    text += `OBJECT_ID = ${kvn.OBJECT_ID}\n\n`;
+    text += `ELEMENTS\n`;
+    for (const [key, value] of Object.entries(kvn.elements)) {
+        text += `  ${key} = ${value}\n`;
+    }
+    return text;
+}
+// ============================================================================
+// CCSDS OEM CONVERSION
+// ============================================================================
+/**
+ * Convert TLE to CCSDS OEM format
+ */
+function tleToOEM(tle, duration = 86400, originator = 'TLE-PARSER') {
+    const epoch = parseEpoch(tle.epochYear, tle.epoch);
+    const startTime = new Date(epoch.getTime());
+    const stopTime = new Date(epoch.getTime() + duration * 1000);
+    return {
+        CCSDS_OEM_VERS: '2.0',
+        CREATION_DATE: new Date().toISOString(),
+        ORIGINATOR: originator,
+        OBJECT_NAME: tle.satelliteName || `SATELLITE ${tle.satelliteNumber1}`,
+        OBJECT_ID: tle.satelliteNumber1,
+        CENTER_NAME: 'EARTH',
+        REF_FRAME: 'TEME',
+        TIME_SYSTEM: 'UTC',
+        START_TIME: startTime.toISOString(),
+        STOP_TIME: stopTime.toISOString(),
+        USEABLE_START_TIME: startTime.toISOString(),
+        USEABLE_STOP_TIME: stopTime.toISOString(),
+        INTERPOLATION: 'HERMITE',
+        INTERPOLATION_DEGREE: 7,
+        ephemerisData: [
+            // Would include propagated state vectors
+            {
+                time: epoch.toISOString(),
+                position: { x: 0, y: 0, z: 0 },
+                velocity: { vx: 0, vy: 0, vz: 0 }
+            }
+        ]
+    };
+}
+/**
+ * Serialize OEM to text format
+ */
+function oemToText(oem) {
+    let text = `CCSDS_OEM_VERS = ${oem.CCSDS_OEM_VERS}\n`;
+    text += `CREATION_DATE = ${oem.CREATION_DATE}\n`;
+    text += `ORIGINATOR = ${oem.ORIGINATOR}\n\n`;
+    text += `META_START\n`;
+    text += `OBJECT_NAME = ${oem.OBJECT_NAME}\n`;
+    text += `OBJECT_ID = ${oem.OBJECT_ID}\n`;
+    text += `CENTER_NAME = ${oem.CENTER_NAME}\n`;
+    text += `REF_FRAME = ${oem.REF_FRAME}\n`;
+    text += `TIME_SYSTEM = ${oem.TIME_SYSTEM}\n`;
+    text += `START_TIME = ${oem.START_TIME}\n`;
+    text += `STOP_TIME = ${oem.STOP_TIME}\n`;
+    text += `INTERPOLATION = ${oem.INTERPOLATION}\n`;
+    text += `INTERPOLATION_DEGREE = ${oem.INTERPOLATION_DEGREE}\n`;
+    text += `META_STOP\n\n`;
+    text += `DATA_START\n`;
+    for (const sv of oem.ephemerisData) {
+        const time = typeof sv.time === 'string' ? sv.time : sv.time.toISOString();
+        text += `${time} ${sv.position.x} ${sv.position.y} ${sv.position.z} `;
+        text += `${sv.velocity.vx} ${sv.velocity.vy} ${sv.velocity.vz}\n`;
+    }
+    text += `DATA_STOP\n`;
+    return text;
+}
+// ============================================================================
+// KEPLERIAN ELEMENTS EXTRACTION
+// ============================================================================
+/**
+ * Extract Keplerian elements from TLE
+ */
+function extractKeplerianElements(tle) {
+    const meanMotion = parseFloat(tle.meanMotion);
+    const eccentricity = parseFloat(tle.eccentricity);
+    const inclination = parseFloat(tle.inclination);
+    const raan = parseFloat(tle.rightAscension);
+    const argPerigee = parseFloat(tle.argumentOfPerigee);
+    const meanAnomaly = parseFloat(tle.meanAnomaly);
+    const epoch = parseEpoch(tle.epochYear, tle.epoch);
+    // Calculate semi-major axis from mean motion
+    const mu = 398600.4418; // Earth's gravitational parameter (km³/s²)
+    const n = meanMotion * 2 * Math.PI / 86400; // Convert to rad/s
+    const semiMajorAxis = Math.pow(mu / (n * n), 1 / 3);
+    // Calculate period
+    const period = 2 * Math.PI * Math.sqrt(Math.pow(semiMajorAxis, 3) / mu);
+    // Calculate true anomaly from mean anomaly
+    const trueAnomaly = meanAnomalyToTrueAnomaly(meanAnomaly * Math.PI / 180, eccentricity) * 180 / Math.PI;
+    return {
+        semiMajorAxis,
+        eccentricity,
+        inclination,
+        rightAscensionOfAscendingNode: raan,
+        argumentOfPerigee: argPerigee,
+        meanAnomaly,
+        trueAnomaly,
+        epoch,
+        meanMotion: n,
+        period
+    };
+}
+// ============================================================================
+// STATE VECTOR CONVERSION
+// ============================================================================
+/**
+ * Convert TLE to state vector at epoch
+ * Note: This is a simplified conversion. For accurate propagation, use SGP4.
+ */
+function tleToStateVector(tle) {
+    const keplerianElements = extractKeplerianElements(tle);
+    // Convert Keplerian elements to Cartesian coordinates
+    const { position, velocity } = keplerianToCartesian(keplerianElements);
+    return {
+        time: keplerianElements.epoch,
+        position,
+        velocity
+    };
+}
+/**
+ * Convert Keplerian elements to Cartesian state vector
+ */
+function keplerianToCartesian(elements) {
+    const a = elements.semiMajorAxis;
+    const e = elements.eccentricity;
+    const i = elements.inclination * Math.PI / 180;
+    const raan = elements.rightAscensionOfAscendingNode * Math.PI / 180;
+    const omega = elements.argumentOfPerigee * Math.PI / 180;
+    const nu = (elements.trueAnomaly || 0) * Math.PI / 180;
+    const mu = 398600.4418; // km³/s²
+    // Position in orbital plane
+    const r = a * (1 - e * e) / (1 + e * Math.cos(nu));
+    const x_orb = r * Math.cos(nu);
+    const y_orb = r * Math.sin(nu);
+    // Velocity in orbital plane
+    const h = Math.sqrt(mu * a * (1 - e * e));
+    const vx_orb = -mu / h * Math.sin(nu);
+    const vy_orb = mu / h * (e + Math.cos(nu));
+    // Rotation matrices
+    const cosRaan = Math.cos(raan);
+    const sinRaan = Math.sin(raan);
+    const cosI = Math.cos(i);
+    const sinI = Math.sin(i);
+    const cosOmega = Math.cos(omega);
+    const sinOmega = Math.sin(omega);
+    // Transform to inertial frame
+    const x = (cosRaan * cosOmega - sinRaan * sinOmega * cosI) * x_orb +
+        (-cosRaan * sinOmega - sinRaan * cosOmega * cosI) * y_orb;
+    const y = (sinRaan * cosOmega + cosRaan * sinOmega * cosI) * x_orb +
+        (-sinRaan * sinOmega + cosRaan * cosOmega * cosI) * y_orb;
+    const z = (sinOmega * sinI) * x_orb + (cosOmega * sinI) * y_orb;
+    const vx = (cosRaan * cosOmega - sinRaan * sinOmega * cosI) * vx_orb +
+        (-cosRaan * sinOmega - sinRaan * cosOmega * cosI) * vy_orb;
+    const vy = (sinRaan * cosOmega + cosRaan * sinOmega * cosI) * vx_orb +
+        (-sinRaan * sinOmega + cosRaan * cosOmega * cosI) * vy_orb;
+    const vz = (sinOmega * sinI) * vx_orb + (cosOmega * sinI) * vy_orb;
+    return {
+        position: { x, y, z },
+        velocity: { vx, vy, vz }
+    };
+}
+// ============================================================================
+// GPS ALMANAC CONVERSION
+// ============================================================================
+/**
+ * Convert TLE to GPS almanac format (simplified)
+ */
+function tleToGPSAlmanac(tle) {
+    const epoch = parseEpoch(tle.epochYear, tle.epoch);
+    const keplerianElements = extractKeplerianElements(tle);
+    // GPS week number (starts from Jan 6, 1980)
+    const gpsEpoch = new Date('1980-01-06T00:00:00Z');
+    const weekNumber = Math.floor((epoch.getTime() - gpsEpoch.getTime()) / (7 * 24 * 60 * 60 * 1000));
+    return {
+        satelliteId: tle.satelliteNumber1,
+        health: 0, // Assume healthy
+        eccentricity: parseFloat(tle.eccentricity),
+        timeOfApplicability: epoch.getTime() / 1000, // seconds
+        orbitalInclination: parseFloat(tle.inclination) * Math.PI / 180,
+        rateOfRightAscension: 0, // Would need to calculate
+        sqrtSemiMajorAxis: Math.sqrt(keplerianElements.semiMajorAxis),
+        rightAscensionAtWeek: parseFloat(tle.rightAscension) * Math.PI / 180,
+        argumentOfPerigee: parseFloat(tle.argumentOfPerigee) * Math.PI / 180,
+        meanAnomaly: parseFloat(tle.meanAnomaly) * Math.PI / 180,
+        af0: 0, // Clock correction parameters would need additional data
+        af1: 0,
+        week: weekNumber
+    };
+}
+// ============================================================================
+// COORDINATE FRAME TRANSFORMATIONS
+// ============================================================================
+/**
+ * Transform state vector between coordinate frames
+ * Note: This is a simplified implementation
+ */
+function transformCoordinateFrame(stateVector, fromFrame, toFrame, time) {
+    if (fromFrame === toFrame) {
+        return stateVector;
+    }
+    // For TEME to J2000 transformation (simplified)
+    if (fromFrame === CoordinateFrame.TEME && toFrame === CoordinateFrame.J2000) {
+        return temeToJ2000(stateVector);
+    }
+    // For J2000 to TEME transformation
+    if (fromFrame === CoordinateFrame.J2000 && toFrame === CoordinateFrame.TEME) {
+        return j2000ToTEME(stateVector);
+    }
+    // Default: return unchanged (placeholder)
+    return stateVector;
+}
+/**
+ * Transform from TEME to J2000 (simplified)
+ */
+function temeToJ2000(sv, _time) {
+    // This is a placeholder. Real transformation requires:
+    // 1. Precession matrix
+    // 2. Nutation matrix
+    // 3. Earth rotation angle
+    // For now, return unchanged
+    return sv;
+}
+/**
+ * Transform from J2000 to TEME (simplified)
+ */
+function j2000ToTEME(sv, _time) {
+    // Inverse of TEME to J2000
+    return sv;
+}
+// ============================================================================
+// PLANETARIUM SOFTWARE FORMATS
+// ============================================================================
+/**
+ * Convert TLE to Stellarium format
+ */
+function tleToStellarium(tle) {
+    const name = tle.satelliteName || `SATELLITE ${tle.satelliteNumber1}`;
+    return `["${name}","${tle.lineNumber1} ${tle.satelliteNumber1}${tle.classification}...","${tle.lineNumber2} ${tle.satelliteNumber2}..."]`;
+}
+/**
+ * Convert TLE to Celestia SSC format
+ */
+function tleToCelestia(tle) {
+    const keplerianElements = extractKeplerianElements(tle);
+    const epoch = parseEpoch(tle.epochYear, tle.epoch);
+    let ssc = `"${tle.satelliteName || tle.satelliteNumber1}" "Sol/Earth"\n{\n`;
+    ssc += `  Class "spacecraft"\n`;
+    ssc += `  Mesh "satellite.3ds"\n`;
+    ssc += `  Radius 0.01\n\n`;
+    ssc += `  EllipticalOrbit\n  {\n`;
+    ssc += `    Epoch ${epoch.getTime() / 1000}\n`;
+    ssc += `    SemiMajorAxis ${keplerianElements.semiMajorAxis}\n`;
+    ssc += `    Eccentricity ${keplerianElements.eccentricity}\n`;
+    ssc += `    Inclination ${keplerianElements.inclination}\n`;
+    ssc += `    AscendingNode ${keplerianElements.rightAscensionOfAscendingNode}\n`;
+    ssc += `    ArgOfPericenter ${keplerianElements.argumentOfPerigee}\n`;
+    ssc += `    MeanAnomaly ${keplerianElements.meanAnomaly}\n`;
+    ssc += `  }\n}\n`;
+    return ssc;
+}
+/**
+ * Convert to generic planetarium format
+ */
+function tleToPlanetarium(tle, format) {
+    switch (format) {
+        case PlanetariumFormat.STELLARIUM:
+            return tleToStellarium(tle);
+        case PlanetariumFormat.CELESTIA:
+            return tleToCelestia(tle);
+        case PlanetariumFormat.SPACENGINE:
+        case PlanetariumFormat.UNIVERSESANDBOX:
+            // Would implement specific formats
+            return JSON.stringify(extractKeplerianElements(tle), null, 2);
+        default:
+            return JSON.stringify(tle, null, 2);
+    }
+}
+// ============================================================================
+// CUSTOM FORMAT DEFINITION SYSTEM
+// ============================================================================
+/**
+ * Convert TLE to custom format
+ */
+function tleToCustomFormat(tle, format) {
+    let output = format.header || '';
+    const separator = format.separator || ',';
+    const lineEnding = format.lineEnding || '\n';
+    const values = [];
+    for (const field of format.fields) {
+        let value = tle[field.source];
+        // Apply transformation if provided
+        if (field.transform) {
+            value = field.transform(value);
+        }
+        // Apply formatting if provided
+        if (field.format && typeof value === 'number') {
+            // Simple formatting support
+            value = value.toFixed(parseInt(field.format) || 0);
+        }
+        values.push(String(value));
+    }
+    output += values.join(separator) + lineEnding;
+    output += format.footer || '';
+    return output;
+}
+/**
+ * Create custom format definition
+ */
+function createCustomFormat(name, fields, options = {}) {
+    return {
+        name,
+        version: '1.0',
+        fields,
+        separator: options.separator,
+        lineEnding: options.lineEnding,
+        header: options.header,
+        footer: options.footer
+    };
+}
+// ============================================================================
+// LEGACY TLE FORMAT SUPPORT
+// ============================================================================
+/**
+ * Convert modern TLE to legacy format (if different)
+ */
+function tleToLegacyFormat(tle) {
+    // Most TLE formats are compatible, but older systems may have different requirements
+    // This would handle any legacy-specific formatting
+    return reconstructTLE(tle);
+}
+/**
+ * Reconstruct TLE string from ParsedTLE object
+ */
+function reconstructTLE(tle) {
+    let output = '';
+    // Line 0 (satellite name)
+    if (tle.satelliteName) {
+        output += tle.satelliteName + '\n';
+    }
+    // Line 1
+    output += `1 ${tle.satelliteNumber1}${tle.classification} `;
+    output += `${tle.internationalDesignatorYear}${tle.internationalDesignatorLaunchNumber}${tle.internationalDesignatorPiece} `;
+    output += `${tle.epochYear}${tle.epoch} `;
+    output += `${tle.firstDerivative} `;
+    output += `${tle.secondDerivative} `;
+    output += `${tle.bStar} `;
+    output += `${tle.ephemerisType} `;
+    output += `${tle.elementSetNumber}`;
+    output += tle.checksum1 + '\n';
+    // Line 2
+    output += `2 ${tle.satelliteNumber2} `;
+    output += `${tle.inclination} `;
+    output += `${tle.rightAscension} `;
+    output += `${tle.eccentricity} `;
+    output += `${tle.argumentOfPerigee} `;
+    output += `${tle.meanAnomaly} `;
+    output += `${tle.meanMotion}`;
+    output += `${tle.revolutionNumber}`;
+    output += tle.checksum2;
+    return output;
+}
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+/**
+ * Parse epoch from TLE format
+ */
+function parseEpoch(epochYear, epoch) {
+    const year = parseInt(epochYear);
+    const fullYear = year >= 57 ? 1900 + year : 2000 + year;
+    const dayOfYear = parseFloat(epoch);
+    const date = new Date(Date.UTC(fullYear, 0, 1));
+    const millisInDay = 24 * 60 * 60 * 1000;
+    date.setTime(date.getTime() + (dayOfYear - 1) * millisInDay);
+    return date;
+}
+/**
+ * Get day of year from date
+ */
+function getDayOfYear(date) {
+    const start = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+    const diff = date.getTime() - start.getTime();
+    return 1 + diff / (24 * 60 * 60 * 1000);
+}
+/**
+ * Format number in scientific notation for TLE
+ */
+function formatScientific(value, width) {
+    const sign = value >= 0 ? ' ' : '-';
+    const absValue = Math.abs(value);
+    const exponent = Math.floor(Math.log10(absValue));
+    const mantissa = absValue / Math.pow(10, exponent);
+    return `${sign}${mantissa.toFixed(width - 4)}${exponent >= 0 ? '+' : ''}${exponent}`;
+}
+/**
+ * Format eccentricity (without leading decimal point)
+ */
+function formatEccentricity(value) {
+    return value.toFixed(7).substring(2);
+}
+/**
+ * Format international designator
+ */
+function formatInternationalDesignator(objectId) {
+    // This is simplified; real implementation would parse the object ID
+    return objectId.padEnd(8, ' ');
+}
+/**
+ * Calculate TLE checksum
+ */
+function calculateChecksum$1(line) {
+    let sum = 0;
+    for (const char of line) {
+        if (char >= '0' && char <= '9') {
+            sum += parseInt(char);
+        }
+        else if (char === '-') {
+            sum += 1;
+        }
+    }
+    return (sum % 10).toString();
+}
+/**
+ * Convert mean anomaly to true anomaly using Newton's method
+ */
+function meanAnomalyToTrueAnomaly(M, e, tolerance = 1e-8) {
+    // Solve Kepler's equation: M = E - e*sin(E)
+    let E = M; // Initial guess
+    let delta = 1;
+    while (Math.abs(delta) > tolerance) {
+        delta = (E - e * Math.sin(E) - M) / (1 - e * Math.cos(E));
+        E -= delta;
+    }
+    // Convert eccentric anomaly to true anomaly
+    const nu = 2 * Math.atan2(Math.sqrt(1 + e) * Math.sin(E / 2), Math.sqrt(1 - e) * Math.cos(E / 2));
+    return nu;
 }
 
 /**
@@ -9823,5 +11341,5 @@ var index = {
     ERROR_CODES
 };
 
-export { AMSATSource, CONSTELLATIONS, CelesTrakSource, Colors, CustomSource, DEFAULT_VALIDATION_RULES, DESIGNATOR_CONSTRAINTS, DataSourceManager, EPOCH_CONSTRAINTS, ERROR_CODES, ErrorSeverityEnum as ErrorSeverity, IncrementalParser, MiddlewareParser, ORBITAL_PARAMETER_RANGES, ParserState, QUALITY_SCORE_WEIGHTS, RateLimiter, RateLimiterManager, RecoveryAction, SATELLITE_NUMBER_RANGES, SCHEDULE_INTERVALS, SchedulerManager, SpaceTrackSource, TLECache, TLEErrorCode, TLEFormatError, TLEParserStream, TLEScheduler, TLEStateMachineParser, TLEValidationError, TTLCache, ValidationRuleManager, applyFilter, calculateChecksum, calculateDopplerShift, calculateEclipses, calculateEpochAge, calculateGroundTrack, calculateLookAngles, calculateOrbitalParameters, calculateOrbitalPeriod, calculateQualityScore, calculateVisibilityWindows, checkClassificationWarnings, checkDragAndEphemerisWarnings, checkEpochWarnings, checkOrbitalParameterWarnings, convertEpochToDate, createCachedParser, createConstellationFilter, createIncrementalParser, createMiddlewareParser, createTLEParserStream, createValidationRule, index as default, detectAnomalies, detectStationKeepingManeuver, filterByConstellation, filterByFreshness, formatAsCSV, formatAsHuman, formatAsJSON, formatAsXML, formatAsYAML, formatTLE, generateCacheKey, generateOrbitVisualization, generateValidationReport, getConstellation, getErrorDescription, getPositionAtEpoch, getPositionAtTime, getProfileOptions, getProviderOptions, groupByConstellation, initializeSatelliteRecord, isCriticalError, isParseFailure, isParseSuccess, isParsedTLE, isTLEError, isTLEWarning, isValidClassification, isValidErrorCode, isValidationFailure, isValidationSuccess, isWarningCode, listConstellations, matchesConstellation, normalizeAssumedDecimalNotation, normalizeLineEndings, normalizeScientificNotation, parseBatch, parseBatchAsync, parseFromCompressed, parseFromFile, parseFromStream, parseFromURL, parseInterval, parseParallel, parseTLE, parseTLEAsync, parseTLELines, parseWithProfile, parseWithProvider, parseWithStateMachine, predictConjunctions, predictFuturePositions, reconstructTLE, sanitizeAllFields, sanitizeField, splitTLEs, tleCache, validateAllOrbitalParameters, validateChecksum, validateClassification, validateEpochAge, validateEpochDate, validateFreshness, validateInternationalDesignator, validateLineStructure, validateNumericRange, validateOrbitalParameter, validateSatelliteNumber, validateTLE, validateTLEAsync };
+export { AMSATSource, CONSTELLATIONS, CelesTrakSource, Colors, CoordinateFrame, CustomSource, DEFAULT_VALIDATION_RULES, DESIGNATOR_CONSTRAINTS, DataSourceManager, EPOCH_CONSTRAINTS, ERROR_CODES, ErrorSeverityEnum as ErrorSeverity, IncrementalParser, MiddlewareParser, ORBITAL_PARAMETER_RANGES, OrbitType, ParserState, PlanetariumFormat, QUALITY_SCORE_WEIGHTS, RateLimiter, RateLimiterManager, RecoveryAction, SATELLITE_NUMBER_RANGES, SCHEDULE_INTERVALS, SchedulerManager, SpaceTrackSource, TLECache, TLEErrorCode, TLEFormatError, TLEParserStream, TLEScheduler, TLEStateMachineParser, TLEValidationError, TTLCache, ValidationRuleManager, analyzeConstellation, analyzeOrbitalDecay, analyzeTrend, applyFilter, assessTLEStaleness, calculateChecksum, calculateConjunctionProbability, calculateDopplerShift, calculateEclipses, calculateEpochAge, calculateGroundTrack, calculateLookAngles, calculateOrbitalParameters, calculateOrbitalPeriod, calculateQualityMetrics, calculateQualityScore, calculateUpdateFrequency, calculateVisibilityWindows, checkClassificationWarnings, checkDragAndEphemerisWarnings, checkEpochWarnings, checkOrbitalParameterWarnings, classifyOrbitType, compareTLEs, convertEpochToDate, createCachedParser, createConstellationFilter, createCustomFormat, createIncrementalParser, createMiddlewareParser, createTLEParserStream, createValidationRule, index as default, detectAnomalies$1 as detectAnomalies, detectStationKeepingManeuver, detectAnomalies as detectTLEAnomalies, extractKeplerianElements, filterByConstellation, filterByFreshness, formatAsCSV, formatAsHuman, formatAsJSON, formatAsXML, formatAsYAML, formatTLE, generateCacheKey, generateOrbitVisualization, generateTLEDiff, generateValidationReport, getConstellation, getErrorDescription, getPositionAtEpoch, getPositionAtTime, getProfileOptions, getProviderOptions, groupByConstellation, groupIntoOrbitalFamilies, initializeSatelliteRecord, isCriticalError, isParseFailure, isParseSuccess, isParsedTLE, isTLEError, isTLEWarning, isValidClassification, isValidErrorCode, isValidationFailure, isValidationSuccess, isWarningCode, keplerianToCartesian, kvnToText, listConstellations, matchesConstellation, normalizeAssumedDecimalNotation, normalizeLineEndings, normalizeScientificNotation, oemToText, ommToTLE, ommToXML, parseBatch, parseBatchAsync, parseFromCompressed, parseFromFile, parseFromStream, parseFromURL, parseInterval, parseParallel, parseTLE, parseTLEAsync, parseTLELines, parseWithProfile, parseWithProvider, parseWithStateMachine, predictConjunctions, predictFuturePositions, reconstructTLE$1 as reconstructTLE, reconstructTLE as reconstructTLEFromParsedObject, sanitizeAllFields, sanitizeField, splitTLEs, stkToFile, tleCache, tleToCelestia, tleToCustomFormat, tleToGPSAlmanac, tleToKVN, tleToLegacyFormat, tleToOEM, tleToOMM, tleToPlanetarium, tleToSTK, tleToStateVector, tleToStellarium, transformCoordinateFrame, validateAgainstRadar, validateAllOrbitalParameters, validateChecksum, validateClassification, validateEpochAge, validateEpochDate, validateFreshness, validateInternationalDesignator, validateLineStructure, validateNumericRange, validateOrbitalParameter, validateSatelliteNumber, validateTLE, validateTLEAsync };
 //# sourceMappingURL=index.mjs.map

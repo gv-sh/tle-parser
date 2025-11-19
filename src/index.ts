@@ -53,6 +53,75 @@ export * from './scheduler';
 // Re-export orbital calculations features (Week 5)
 export * from './orbitalCalculations';
 
+// Re-export data analysis and format conversion features (Week 6)
+export {
+  OrbitType,
+  compareTLEs,
+  generateTLEDiff,
+  assessTLEStaleness,
+  analyzeOrbitalDecay,
+  calculateUpdateFrequency,
+  detectAnomalies as detectTLEAnomalies,
+  analyzeConstellation,
+  calculateQualityMetrics,
+  analyzeTrend,
+  classifyOrbitType,
+  calculateConjunctionProbability,
+  validateAgainstRadar,
+  groupIntoOrbitalFamilies
+} from './dataAnalysis';
+export type {
+  TLEComparison,
+  TLEFieldDiff,
+  TLEStaleness,
+  OrbitalDecayAnalysis,
+  TLEUpdateFrequencyStats,
+  AnomalyDetection,
+  ConstellationAnalysis,
+  TLEQualityMetrics,
+  TLETrendAnalysis,
+  ConjunctionProbability,
+  RadarValidationResult,
+  OrbitalFamily
+} from './dataAnalysis';
+
+export {
+  tleToOMM,
+  ommToTLE,
+  ommToXML,
+  tleToSTK,
+  stkToFile,
+  tleToKVN,
+  kvnToText,
+  tleToOEM,
+  oemToText,
+  extractKeplerianElements,
+  tleToStateVector,
+  keplerianToCartesian,
+  tleToGPSAlmanac,
+  transformCoordinateFrame,
+  tleToStellarium,
+  tleToCelestia,
+  tleToPlanetarium,
+  tleToCustomFormat,
+  createCustomFormat,
+  tleToLegacyFormat,
+  reconstructTLE as reconstructTLEFromParsedObject,
+  CoordinateFrame,
+  PlanetariumFormat
+} from './formatConversion';
+export type {
+  OMMFormat,
+  STKEphemerisFormat,
+  KVNFormat,
+  OEMFormat,
+  GPSAlmanacFormat,
+  StateVector,
+  KeplerianElements,
+  CustomFormat,
+  CustomFormatField
+} from './formatConversion';
+
 // ============================================================================
 // TLE CONFIGURATION LOADING
 // ============================================================================
