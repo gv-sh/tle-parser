@@ -22,6 +22,23 @@ A robust parser for TLE (Two-Line Element) satellite data with comprehensive inp
   - Automatic whitespace normalization (leading/trailing/multiple empty lines)
   - Tab character handling and conversion
   - Unicode character support in satellite names
+- **Modern build system:**
+  - Multiple bundle formats (ESM, CommonJS, UMD, Browser)
+  - Tree-shaking support for optimal bundle sizes
+  - Source maps for debugging
+  - Minified production builds
+  - TypeScript definitions included
+
+## Package Formats
+
+This package is distributed in multiple formats to support different JavaScript environments:
+
+- **ESM** (`import`) - Modern ES modules for Node.js 14+ and bundlers
+- **CommonJS** (`require`) - Traditional Node.js format
+- **UMD** - Universal format for browsers and Node.js
+- **Browser** - Standalone browser bundles with no Node.js dependencies
+
+The correct format is automatically selected based on your environment. See [BUILD.md](BUILD.md) for details.
 
 ## Documentation
 
@@ -42,7 +59,18 @@ Comprehensive documentation is available in the [docs](docs/) directory:
 - **[Troubleshooting](docs/guides/TROUBLESHOOTING.md)** - Common issues and solutions
 - **[Performance Guide](docs/guides/PERFORMANCE.md)** - Optimization strategies
 
+### Build & Development
+- **[Build System Documentation](BUILD.md)** - Modern build pipeline, bundle formats, and publishing
+
 ## Installation
+
+### From npm (coming soon)
+
+```bash
+npm install tle-parser
+```
+
+### From source
 
 Clone the repository:
 

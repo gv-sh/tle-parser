@@ -4,8 +4,6 @@
  * with full TypeScript support and strict type safety
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
 import { ERROR_CODES } from './errorCodes';
 import type {
   ParsedTLE,
@@ -22,6 +20,8 @@ import type {
   ITLEFormatError,
   LegacyValidationResult
 } from './types';
+// @ts-ignore - JSON import
+import tleConfigData from '../tleConfig.json';
 
 // Re-export types for consumers
 export * from './types';
@@ -45,21 +45,8 @@ interface TLEConfigMapping {
   readonly [key: string]: readonly [number, number];
 }
 
-// Load the TLE configuration with proper error handling
-const tleConfigPath = path.join(__dirname, 'tleConfig.json');
-let tleConfig: TLEConfigMapping;
-
-try {
-  const configData = fs.readFileSync(tleConfigPath, 'utf-8');
-  tleConfig = JSON.parse(configData) as TLEConfigMapping;
-} catch (error) {
-  if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-    throw new Error(`TLE configuration file not found: ${tleConfigPath}`);
-  } else if (error instanceof SyntaxError) {
-    throw new Error(`Invalid TLE configuration JSON: ${error.message}`);
-  }
-  throw error;
-}
+// Load the TLE configuration from imported JSON
+const tleConfig: TLEConfigMapping = tleConfigData as unknown as TLEConfigMapping;
 
 // ============================================================================
 // CUSTOM ERROR CLASSES
