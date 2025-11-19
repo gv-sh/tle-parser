@@ -1,0 +1,14 @@
+[
+  {
+    "name": "Browser Build",
+    "path": "dist/index.browser.js",
+    "limit": "25 KB",
+    "gzip": true
+  },
+  {
+    "name": "Browser Build (Minified)",
+    "path": "dist/index.browser.min.js",
+    "limit": "15 KB",
+    "gzip": true
+  }
+]
