@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TLE Parser</title>
+  <style>
+    body {
+      width: 400px;
+      min-height: 300px;
+      margin: 0;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    }
+
+    h1 {
+      font-size: 1.25rem;
+      margin: 0 0 16px 0;
+      color: #212529;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 120px;
+      padding: 8px;
+      border: 1px solid #ced4da;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 0.875rem;
+      resize: vertical;
+    }
+
+    .actions {
+      margin-top: 12px;
+      display: flex;
+      gap: 8px;
+    }
+
+    button {
+      flex: 1;
+      padding: 8px 16px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+
+    .btn-primary {
+      background: #007bff;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #0056b3;
+    }
+
+    .btn-secondary {
+      background: #6c757d;
+      color: white;
+    }
+
+    .btn-secondary:hover {
+      background: #545b62;
+    }
+
+    .result {
+      margin-top: 16px;
+      padding: 12px;
+      background: #f8f9fa;
+      border-radius: 4px;
+      border: 1px solid #dee2e6;
+      display: none;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .result.show {
+      display: block;
+    }
+
+    .result-title {
+      font-weight: bold;
+      margin-bottom: 8px;
+      color: #495057;
+    }
+
+    .result-field {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 0;
+      font-size: 0.875rem;
+    }
+
+    .result-label {
+      color: #6c757d;
+    }
+
+    .result-value {
+      font-family: monospace;
+      color: #212529;
+    }
+
+    .error {
+      background: #f8d7da;
+      color: #721c24;
+      padding: 12px;
+      border-radius: 4px;
+      border: 1px solid #f5c6cb;
+      margin-top: 12px;
+      display: none;
+    }
+
+    .error.show {
+      display: block;
+    }
+
+    .storage-info {
+      margin-top: 16px;
+      padding: 12px;
+      background: #e7f3ff;
+      border-radius: 4px;
+      font-size: 0.875rem;
+      color: #004085;
+    }
+  </style>
+</head>
+<body>
+  <h1>🛰️ TLE Parser</h1>
+
+  <textarea id="tleInput" placeholder="Paste TLE data here (2 or 3 line format)..."></textarea>
+
+  <div class="actions">
+    <button class="btn-primary" id="parseBtn">Parse</button>
+    <button class="btn-secondary" id="saveBtn">Save</button>
+    <button class="btn-secondary" id="clearBtn">Clear</button>
+  </div>
+
+  <div id="error" class="error"></div>
+
+  <div id="result" class="result">
+    <div class="result-title" id="satName">Satellite</div>
+    <div class="result-field">
+      <span class="result-label">NORAD ID:</span>
+      <span class="result-value" id="satNumber">-</span>
+    </div>
+    <div class="result-field">
+      <span class="result-label">Classification:</span>
+      <span class="result-value" id="classification">-</span>
+    </div>
+    <div class="result-field">
+      <span class="result-label">Inclination:</span>
+      <span class="result-value" id="inclination">-</span>
+    </div>
+    <div class="result-field">
+      <span class="result-label">Eccentricity:</span>
+      <span class="result-value" id="eccentricity">-</span>
+    </div>
+    <div class="result-field">
+      <span class="result-label">Mean Motion:</span>
+      <span class="result-value" id="meanMotion">-</span>
+    </div>
+  </div>
+
+  <div class="storage-info">
+    <strong>Recent TLEs:</strong> <span id="storageCount">0</span> saved
+  </div>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

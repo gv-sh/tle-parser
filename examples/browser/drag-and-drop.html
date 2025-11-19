@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TLE Parser - Drag & Drop Demo</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      color: white;
+      text-align: center;
+      margin-bottom: 30px;
+      font-size: 2.5rem;
+    }
+
+    .drop-zone {
+      background: white;
+      border: 3px dashed #667eea;
+      border-radius: 12px;
+      padding: 60px 20px;
+      text-align: center;
+      transition: all 0.3s ease;
+      cursor: pointer;
+      margin-bottom: 20px;
+    }
+
+    .drop-zone.dragover {
+      background: #f0f4ff;
+      border-color: #764ba2;
+      transform: scale(1.02);
+    }
+
+    .drop-zone-icon {
+      font-size: 4rem;
+      margin-bottom: 20px;
+    }
+
+    .drop-zone-text {
+      font-size: 1.2rem;
+      color: #667eea;
+      margin-bottom: 10px;
+    }
+
+    .drop-zone-hint {
+      color: #888;
+      font-size: 0.9rem;
+    }
+
+    .file-input {
+      display: none;
+    }
+
+    .results {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      margin-top: 20px;
+      display: none;
+    }
+
+    .results.show {
+      display: block;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .stat-card {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 20px;
+      border-radius: 8px;
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 2rem;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+
+    .stat-label {
+      font-size: 0.9rem;
+      opacity: 0.9;
+    }
+
+    .tle-list {
+      max-height: 500px;
+      overflow-y: auto;
+    }
+
+    .tle-item {
+      background: #f8f9fa;
+      padding: 15px;
+      margin-bottom: 10px;
+      border-radius: 8px;
+      border-left: 4px solid #667eea;
+    }
+
+    .tle-name {
+      font-weight: bold;
+      color: #333;
+      margin-bottom: 5px;
+    }
+
+    .tle-details {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 10px;
+      font-size: 0.85rem;
+      color: #666;
+    }
+
+    .error-list {
+      background: #fff3cd;
+      border-left: 4px solid #ffc107;
+      padding: 15px;
+      margin-bottom: 20px;
+      border-radius: 8px;
+    }
+
+    .error-item {
+      margin-bottom: 5px;
+      color: #856404;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #667eea;
+    }
+
+    .spinner {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #667eea;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 20px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .btn {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 6px;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-weight: 500;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-secondary {
+      background: #f8f9fa;
+      color: #333;
+      border: 1px solid #ddd;
+    }
+
+    .btn-secondary:hover {
+      background: #e9ecef;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🛰️ TLE Parser - Drag & Drop</h1>
+
+    <div class="drop-zone" id="dropZone">
+      <div class="drop-zone-icon">📁</div>
+      <div class="drop-zone-text">Drag & drop TLE files here</div>
+      <div class="drop-zone-hint">or click to browse</div>
+      <input type="file" id="fileInput" class="file-input" accept=".txt,.tle" multiple>
+    </div>
+
+    <div id="loading" class="loading" style="display: none;">
+      <div class="spinner"></div>
+      <div>Processing TLE files...</div>
+    </div>
+
+    <div id="results" class="results">
+      <div class="actions">
+        <button class="btn btn-primary" onclick="downloadResults()">Download Results (JSON)</button>
+        <button class="btn btn-secondary" onclick="clearResults()">Clear</button>
+      </div>
+
+      <div class="stats">
+        <div class="stat-card">
+          <div class="stat-value" id="fileCount">0</div>
+          <div class="stat-label">Files Processed</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="tleCount">0</div>
+          <div class="stat-label">TLEs Parsed</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="errorCount">0</div>
+          <div class="stat-label">Errors</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="processingTime">0ms</div>
+          <div class="stat-label">Processing Time</div>
+        </div>
+      </div>
+
+      <div id="errors"></div>
+      <div id="tleList" class="tle-list"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { parseFromFileList, parseFromDragEvent } from '../../dist/index.browser.min.js';
+
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const loading = document.getElementById('loading');
+    const results = document.getElementById('results');
+
+    let parsedResults = [];
+
+    // Drag and drop handlers
+    dropZone.addEventListener('click', () => fileInput.click());
+
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('dragover');
+    });
+
+    dropZone.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      await processFiles(e);
+    });
+
+    fileInput.addEventListener('change', async (e) => {
+      await processFiles(e);
+    });
+
+    async function processFiles(event) {
+      loading.style.display = 'block';
+      results.classList.remove('show');
+
+      try {
+        let fileResults;
+        if (event.type === 'drop') {
+          fileResults = await parseFromDragEvent(event);
+        } else {
+          fileResults = await parseFromFileList(event.target.files);
+        }
+
+        parsedResults = fileResults;
+        displayResults(fileResults);
+      } catch (error) {
+        alert('Error processing files: ' + error.message);
+      } finally {
+        loading.style.display = 'none';
+        fileInput.value = '';
+      }
+    }
+
+    function displayResults(fileResults) {
+      // Calculate totals
+      const totalTLEs = fileResults.reduce((sum, file) => sum + file.tleCount, 0);
+      const totalErrors = fileResults.reduce((sum, file) => sum + file.errors.length, 0);
+      const totalTime = fileResults.reduce((sum, file) => sum + file.processingTime, 0);
+
+      // Update stats
+      document.getElementById('fileCount').textContent = fileResults.length;
+      document.getElementById('tleCount').textContent = totalTLEs;
+      document.getElementById('errorCount').textContent = totalErrors;
+      document.getElementById('processingTime').textContent = totalTime.toFixed(2) + 'ms';
+
+      // Display errors
+      const errorsDiv = document.getElementById('errors');
+      if (totalErrors > 0) {
+        let errorHTML = '<div class="error-list"><strong>Errors:</strong>';
+        fileResults.forEach(file => {
+          file.errors.forEach(err => {
+            errorHTML += `<div class="error-item">${file.fileName} (line ${err.line}): ${err.error}</div>`;
+          });
+        });
+        errorHTML += '</div>';
+        errorsDiv.innerHTML = errorHTML;
+      } else {
+        errorsDiv.innerHTML = '';
+      }
+
+      // Display TLEs
+      const tleListDiv = document.getElementById('tleList');
+      let tleHTML = '';
+      fileResults.forEach(file => {
+        file.tles.forEach(tle => {
+          tleHTML += `
+            <div class="tle-item">
+              <div class="tle-name">${tle.name || 'Unnamed Satellite'} (${tle.satelliteNumber})</div>
+              <div class="tle-details">
+                <div>Epoch: ${tle.epochYear}-${tle.epochDay}</div>
+                <div>Inclination: ${tle.inclination}°</div>
+                <div>Eccentricity: ${tle.eccentricity.toFixed(6)}</div>
+                <div>Classification: ${tle.classification}</div>
+              </div>
+            </div>
+          `;
+        });
+      });
+      tleListDiv.innerHTML = tleHTML;
+
+      results.classList.add('show');
+    }
+
+    window.downloadResults = function() {
+      const dataStr = JSON.stringify(parsedResults, null, 2);
+      const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+      const exportFileDefaultName = 'tle-results.json';
+
+      const linkElement = document.createElement('a');
+      linkElement.setAttribute('href', dataUri);
+      linkElement.setAttribute('download', exportFileDefaultName);
+      linkElement.click();
+    };
+
+    window.clearResults = function() {
+      results.classList.remove('show');
+      parsedResults = [];
+    };
+  </script>
+</body>
+</html>
