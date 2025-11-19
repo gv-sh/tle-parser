@@ -69,7 +69,7 @@ const configs = [
       ...basePlugins,
       typescriptPlugin
     ],
-    external: ['fs', 'path']
+    external: ['fs', 'path', 'util', 'stream', 'zlib']
   },
 
   // ===================================================================
@@ -87,7 +87,7 @@ const configs = [
       typescriptPlugin,
       minifyPlugin
     ],
-    external: ['fs', 'path']
+    external: ['fs', 'path', 'util', 'stream', 'zlib']
   },
 
   // ===================================================================
@@ -107,7 +107,7 @@ const configs = [
       ...basePlugins,
       typescriptPlugin
     ],
-    external: ['fs', 'path']
+    external: ['fs', 'path', 'util', 'stream', 'zlib']
   },
 
   // ===================================================================
@@ -127,7 +127,7 @@ const configs = [
       typescriptPlugin,
       minifyPlugin
     ],
-    external: ['fs', 'path']
+    external: ['fs', 'path', 'util', 'stream', 'zlib']
   },
 
   // ===================================================================
@@ -144,7 +144,10 @@ const configs = [
       exports: 'named',
       globals: {
         fs: 'fs',
-        path: 'path'
+        path: 'path',
+        util: 'util',
+        stream: 'stream',
+        zlib: 'zlib'
       }
     },
     plugins: [
@@ -161,7 +164,7 @@ const configs = [
         }
       })
     ],
-    external: ['fs', 'path']
+    external: ['fs', 'path', 'util', 'stream', 'zlib']
   },
 
   // ===================================================================
@@ -177,7 +180,10 @@ const configs = [
       exports: 'named',
       globals: {
         fs: 'fs',
-        path: 'path'
+        path: 'path',
+        util: 'util',
+        stream: 'stream',
+        zlib: 'zlib'
       }
     },
     plugins: [
@@ -195,7 +201,7 @@ const configs = [
       }),
       minifyPlugin
     ],
-    external: ['fs', 'path']
+    external: ['fs', 'path', 'util', 'stream', 'zlib']
   },
 
   // ===================================================================
@@ -226,7 +232,7 @@ const configs = [
         name: 'browser-build',
         resolveId(source) {
           // Replace Node.js built-ins with browser alternatives
-          if (source === 'fs' || source === 'path') {
+          if (source === 'fs' || source === 'path' || source === 'util' || source === 'stream' || source === 'zlib') {
             return { id: source, external: false, moduleSideEffects: false };
           }
           return null;
@@ -243,13 +249,52 @@ const configs = [
                 }
                 throw new Error('File system access is not available in browser builds');
               }
-              export default { readFileSync };
+              export function readFile() {
+                throw new Error('File system access is not available in browser builds');
+              }
+              export function createReadStream() {
+                throw new Error('File system access is not available in browser builds');
+              }
+              export default { readFileSync, readFile, createReadStream };
             `;
           }
           if (id === 'path') {
             return `
               export function join(...args) { return args.join('/'); }
               export default { join };
+            `;
+          }
+          if (id === 'util') {
+            return `
+              export function promisify(fn) {
+                return function(...args) {
+                  return new Promise((resolve, reject) => {
+                    fn(...args, (err, result) => {
+                      if (err) reject(err);
+                      else resolve(result);
+                    });
+                  });
+                };
+              }
+              export default { promisify };
+            `;
+          }
+          if (id === 'stream') {
+            return `
+              export class Transform {
+                constructor() {
+                  throw new Error('Stream operations are not available in browser builds');
+                }
+              }
+              export default { Transform };
+            `;
+          }
+          if (id === 'zlib') {
+            return `
+              export function createGunzip() {
+                throw new Error('Compression operations are not available in browser builds');
+              }
+              export default { createGunzip };
             `;
           }
           return null;
@@ -284,7 +329,7 @@ const configs = [
       {
         name: 'browser-build',
         resolveId(source) {
-          if (source === 'fs' || source === 'path') {
+          if (source === 'fs' || source === 'path' || source === 'util' || source === 'stream' || source === 'zlib') {
             return { id: source, external: false, moduleSideEffects: false };
           }
           return null;
@@ -300,13 +345,52 @@ const configs = [
                 }
                 throw new Error('File system access is not available in browser builds');
               }
-              export default { readFileSync };
+              export function readFile() {
+                throw new Error('File system access is not available in browser builds');
+              }
+              export function createReadStream() {
+                throw new Error('File system access is not available in browser builds');
+              }
+              export default { readFileSync, readFile, createReadStream };
             `;
           }
           if (id === 'path') {
             return `
               export function join(...args) { return args.join('/'); }
               export default { join };
+            `;
+          }
+          if (id === 'util') {
+            return `
+              export function promisify(fn) {
+                return function(...args) {
+                  return new Promise((resolve, reject) => {
+                    fn(...args, (err, result) => {
+                      if (err) reject(err);
+                      else resolve(result);
+                    });
+                  });
+                };
+              }
+              export default { promisify };
+            `;
+          }
+          if (id === 'stream') {
+            return `
+              export class Transform {
+                constructor() {
+                  throw new Error('Stream operations are not available in browser builds');
+                }
+              }
+              export default { Transform };
+            `;
+          }
+          if (id === 'zlib') {
+            return `
+              export function createGunzip() {
+                throw new Error('Compression operations are not available in browser builds');
+              }
+              export default { createGunzip };
             `;
           }
           return null;
@@ -326,7 +410,7 @@ const configs = [
       format: 'esm'
     },
     plugins: [dts()],
-    external: ['fs', 'path']
+    external: ['fs', 'path', 'util', 'stream', 'zlib']
   }
 ];
 

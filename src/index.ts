@@ -34,6 +34,9 @@ export {
   ErrorSeverityEnum as ErrorSeverity
 } from './stateMachineParser';
 
+// Re-export advanced parser features
+export * from './advancedParser';
+
 // ============================================================================
 // TLE CONFIGURATION LOADING
 // ============================================================================
@@ -71,7 +74,9 @@ export class TLEValidationError extends Error implements ITLEValidationError {
     super(message);
     this.errors = errors;
     this.warnings = warnings;
-    Error.captureStackTrace(this, this.constructor);
+    if (typeof Error.captureStackTrace === 'function') {
+      Error.captureStackTrace(this, this.constructor);
+    }
   }
 }
 
@@ -94,7 +99,9 @@ export class TLEFormatError extends Error implements ITLEFormatError {
     super(message);
     this.code = code;
     this.details = details;
-    Error.captureStackTrace(this, this.constructor);
+    if (typeof Error.captureStackTrace === 'function') {
+      Error.captureStackTrace(this, this.constructor);
+    }
   }
 }
 
