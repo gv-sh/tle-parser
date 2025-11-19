@@ -146,17 +146,17 @@ TLE parsers serve critical functions across multiple domains:
 - [x] Implement delta encoding for TLE updates
 
 ### Command-Line Interface
-- [ ] Create command-line interface for parsing TLE files
-- [ ] Add bulk processing capabilities
-- [ ] Implement file watching for continuous parsing
-- [ ] Add output format selection via flags
-- [ ] Support stdin/stdout piping for Unix workflows
+- [x] Create command-line interface for parsing TLE files
+- [x] Add bulk processing capabilities
+- [x] Implement file watching for continuous parsing
+- [x] Add output format selection via flags
+- [x] Support stdin/stdout piping for Unix workflows
 - [ ] Create interactive REPL mode
 - [ ] Add progress indicators for large files
-- [ ] Implement filtering and search from CLI
-- [ ] Add validation-only mode
-- [ ] Create diff tool for comparing TLEs
-- [ ] Support remote URL fetching
+- [x] Implement filtering and search from CLI
+- [x] Add validation-only mode
+- [x] Create diff tool for comparing TLEs
+- [x] Support remote URL fetching
 - [ ] Add shell completion scripts
 
 ## Week 5: Data Sources & Orbital Calculations
