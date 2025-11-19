@@ -1,0 +1,20 @@
+{
+  "name": "tle-parser-react-hooks",
+  "version": "1.0.0",
+  "description": "React hooks for TLE Parser",
+  "main": "useTLE.ts",
+  "types": "useTLE.ts",
+  "keywords": [
+    "tle",
+    "satellite",
+    "react",
+    "hooks",
+    "tracking"
+  ],
+  "peerDependencies": {
+    "react": ">=16.8.0",
+    "tle-parser": "^1.0.0"
+  },
+  "dependencies": {},
+  "license": "MIT"
+}
