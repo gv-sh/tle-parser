@@ -199,7 +199,7 @@ describe('Reference Implementation Validation', () => {
     test('should handle zero B* drag term', () => {
       const zeroBStarTLE = `GPS BIIR-2  (PRN 13)
 1 28474U 04045A   06179.00000000 -.00000016  00000-0  00000+0 0  3925
-2 28474  54.5647 324.8270 0116066  44.1802  48.7034  2.00575370 144300`;
+2 28474  54.5647 324.8270 0116066  44.1802  48.7034  2.00575370144300`;
 
       const parsed = parseTLE(zeroBStarTLE);
       const lines = zeroBStarTLE.split('\n');
