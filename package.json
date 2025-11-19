@@ -2,13 +2,18 @@
   "name": "tle-parser",
   "version": "1.0.0",
   "description": "A parser for TLE (Two-Line Element) satellite data.",
-  "main": "index.js",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
-    "test": "jest",
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "prebuild": "rm -rf dist",
+    "test": "npm run build && jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage",
-    "test:verbose": "jest --verbose",
-    "test:legacy": "node test.js"
+    "test:coverage": "npm run build && jest --coverage",
+    "test:verbose": "npm run build && jest --verbose",
+    "test:legacy": "node test.js",
+    "prepublishOnly": "npm run build"
   },
   "repository": {
     "type": "git",
@@ -29,8 +34,10 @@
   "homepage": "https://github.com/gv-sh/tle-parser#readme",
   "devDependencies": {
     "@types/jest": "^30.0.0",
+    "@types/node": "^20.0.0",
     "fast-check": "^4.3.0",
     "jest": "^30.2.0",
-    "satellite.js": "^6.0.1"
+    "satellite.js": "^6.0.1",
+    "typescript": "^5.3.0"
   }
 }
