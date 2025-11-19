@@ -4,7 +4,11 @@
   "description": "A parser for TLE (Two-Line Element) satellite data.",
   "main": "index.js",
   "scripts": {
-    "test": "node test.js"
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:verbose": "jest --verbose",
+    "test:legacy": "node test.js"
   },
   "repository": {
     "type": "git",
@@ -22,5 +26,9 @@
   "bugs": {
     "url": "https://github.com/gv-sh/tle-parser/issues"
   },
-  "homepage": "https://github.com/gv-sh/tle-parser#readme"
+  "homepage": "https://github.com/gv-sh/tle-parser#readme",
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "jest": "^30.2.0"
+  }
 }
