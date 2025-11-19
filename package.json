@@ -29,6 +29,7 @@
   "homepage": "https://github.com/gv-sh/tle-parser#readme",
   "devDependencies": {
     "@types/jest": "^30.0.0",
+    "fast-check": "^4.3.0",
     "jest": "^30.2.0"
   }
 }
