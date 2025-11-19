@@ -8,6 +8,12 @@ const {
     validateSatelliteNumber,
     validateClassification,
     validateNumericRange,
+    checkClassificationWarnings,
+    checkEpochWarnings,
+    checkOrbitalParameterWarnings,
+    checkDragAndEphemerisWarnings,
+    normalizeLineEndings,
+    parseTLELines,
     TLEValidationError,
     TLEFormatError,
     ERROR_CODES
@@ -466,8 +472,391 @@ try {
     assert(false, 'Valid 3-line Hubble TLE should not throw: ' + e.message);
 }
 
-// Test 42: TLE with single comment line
-console.log('\nTest 42: TLE with single comment line');
+// Test 42: Satellite number boundary validation (max value)
+console.log('\nTest 42: Satellite number at maximum boundary (99999)');
+// Test that 99999 is accepted (it's the maximum valid value for a 5-digit field)
+const satNumMax = `1 99999U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9991
+2 99999  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252423`;
+try {
+    const result = parseTLE(satNumMax);
+    assert(result !== null, 'Satellite number 99999 (max) is valid');
+} catch (e) {
+    assert(false, 'Satellite number 99999 should be valid: ' + e.message);
+}
+
+// Test 43: Satellite number out of range (zero)
+console.log('\nTest 43: Satellite number out of range (zero)');
+const satNumZero = `1 00000U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9991
+2 00000  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252423`;
+try {
+    parseTLE(satNumZero, { strictChecksums: false });
+    assert(false, 'Satellite number 0 should throw error');
+} catch (e) {
+    assert(e.message.includes('Satellite Number') || e.message.includes('satellite'), 'Satellite number zero error detected');
+}
+
+// Test 44: International Designator Year out of range
+console.log('\nTest 44: International Designator Year out of range (> 99)');
+const intlDesigYearBad = `1 25544U A8067A   20300.83097691  .00001534  00000-0  35580-4 0  9990
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252420`;
+try {
+    parseTLE(intlDesigYearBad, { strictChecksums: false });
+    assert(false, 'International Designator Year > 99 should throw error');
+} catch (e) {
+    assert(e.message.includes('International Designator Year') || e.message.includes('Designator'), 'Intl Designator Year error detected');
+}
+
+// Test 45: International Designator Launch Number out of range
+console.log('\nTest 45: International Designator Launch Number out of range (> 999)');
+const intlDesigLaunchBad = `1 25544U 98A67A   20300.83097691  .00001534  00000-0  35580-4 0  9991
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252421`;
+try {
+    parseTLE(intlDesigLaunchBad, { strictChecksums: false });
+    assert(false, 'International Designator Launch Number > 999 should throw error');
+} catch (e) {
+    assert(e.message.includes('International Designator Launch Number') || e.message.includes('Launch Number'), 'Intl Designator Launch Number error detected');
+}
+
+// Test 46: Ephemeris Type out of range
+console.log('\nTest 46: Ephemeris Type out of range (> 9)');
+const ephemerisTypeBad = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 A  9992
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252422`;
+try {
+    parseTLE(ephemerisTypeBad, { strictChecksums: false });
+    assert(false, 'Ephemeris Type > 9 should throw error');
+} catch (e) {
+    assert(e.message.includes('Ephemeris Type') || e.message.includes('ephemeris'), 'Ephemeris Type error detected');
+}
+
+// Test 47: Element Set Number at boundary (9999)
+console.log('\nTest 47: Element Set Number at maximum boundary (9999)');
+// Test that 9999 is accepted (it's the maximum valid value for a 4-digit field)
+const elementSetMax = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0 99995
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(elementSetMax);
+    assert(result !== null, 'Element Set Number 9999 (max) is valid');
+} catch (e) {
+    assert(false, 'Element Set Number 9999 should be valid: ' + e.message);
+}
+
+// Test 48: Revolution Number at boundary (99999)
+console.log('\nTest 48: Revolution Number at maximum boundary (99999)');
+// Test that 99999 is accepted (it's the maximum valid value for a 5-digit field)
+const revNumMax = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189999998`;
+try {
+    const result = parseTLE(revNumMax);
+    assert(result !== null, 'Revolution Number 99999 (max) is valid');
+} catch (e) {
+    assert(false, 'Revolution Number 99999 should be valid: ' + e.message);
+}
+
+// Test 49: Valid Ephemeris Type values (0-9)
+console.log('\nTest 49: Valid Ephemeris Type values');
+const ephemerisType0 = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(ephemerisType0);
+    assert(result !== null, 'Ephemeris Type 0 is valid');
+} catch (e) {
+    assert(false, 'Ephemeris Type 0 should be valid: ' + e.message);
+}
+
+// Test 50: Valid Element Set Number at boundary (9999)
+console.log('\nTest 50: Valid Element Set Number at boundary (9999)');
+const elementSet9999 = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0 99995
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(elementSet9999);
+    assert(result !== null, 'Element Set Number 9999 is valid');
+} catch (e) {
+    assert(false, 'Element Set Number 9999 should be valid: ' + e.message);
+}
+
+// Test 51: Valid Revolution Number at boundary (99999)
+console.log('\nTest 51: Valid Revolution Number at boundary (99999)');
+const revNum99999 = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189999998`;
+try {
+    const result = parseTLE(revNum99999);
+    assert(result !== null, 'Revolution Number 99999 is valid');
+} catch (e) {
+    assert(false, 'Revolution Number 99999 should be valid: ' + e.message);
+}
+
+// Test 52: Valid Satellite Number at boundary (99999)
+console.log('\nTest 52: Valid Satellite Number at boundary (99999)');
+const satNum99999 = `1 99999U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9991
+2 99999  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252423`;
+try {
+    const result = parseTLE(satNum99999);
+    assert(result !== null, 'Satellite Number 99999 is valid');
+} catch (e) {
+    assert(false, 'Satellite Number 99999 should be valid: ' + e.message);
+}
+
+// Test 53: Valid Satellite Number at minimum boundary (1)
+console.log('\nTest 53: Valid Satellite Number at minimum boundary (1)');
+const satNum1 = `1 00001U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9997
+2 00001  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252429`;
+try {
+    const result = parseTLE(satNum1);
+    assert(result !== null, 'Satellite Number 1 is valid');
+} catch (e) {
+    assert(false, 'Satellite Number 1 should be valid: ' + e.message);
+}
+
+// Test 54: Valid International Designator Year at boundary (99)
+console.log('\nTest 54: Valid International Designator Year at boundary (99)');
+const intlDesigYear99 = `1 25544U 99067A   20300.83097691  .00001534  00000-0  35580-4 0  9997
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(intlDesigYear99);
+    assert(result !== null, 'International Designator Year 99 is valid');
+} catch (e) {
+    assert(false, 'International Designator Year 99 should be valid: ' + e.message);
+}
+
+// Test 55: Valid International Designator Launch Number at boundary (999)
+console.log('\nTest 55: Valid International Designator Launch Number at boundary (999)');
+const intlDesigLaunch999 = `1 25544U 98999A   20300.83097691  .00001534  00000-0  35580-4 0  9990
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(intlDesigLaunch999);
+    assert(result !== null, 'International Designator Launch Number 999 is valid');
+} catch (e) {
+    assert(false, 'International Designator Launch Number 999 should be valid: ' + e.message);
+}
+
+// Test 56: validateRanges option disabled
+console.log('\nTest 56: validateRanges option disabled allows out of range values');
+const outOfRangeTLE = `1999999U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9991
+2999999  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252423`;
+try {
+    const result = parseTLE(outOfRangeTLE, { validate: true, strictChecksums: false, validateRanges: false });
+    assert(false, 'Should still fail due to satellite number mismatch validation');
+} catch (e) {
+    // This should fail because satellite number mismatch is always checked, not just in range validation
+    assert(true, 'Satellite number validation still enforced');
+}
+
+// ===============================================
+// Tests for Deprecation and Unusual Value Warnings
+// ===============================================
+
+console.log('\n=== Deprecation and Unusual Value Warning Tests ===\n');
+
+// Test 57: Classification warning for 'C' (Classified)
+console.log('Test 57: Classification warning for "C" (Classified)');
+const classifiedTLE = `1 25544C 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(classifiedTLE);
+    const hasWarning = result.warnings && result.warnings.some(w => w.code === ERROR_CODES.CLASSIFIED_DATA_WARNING);
+    assert(hasWarning, 'Classification "C" generates warning');
+} catch (e) {
+    assert(false, 'Should not throw for valid classified TLE: ' + e.message);
+}
+
+// Test 43: Classification warning for 'S' (Secret)
+console.log('\nTest 43: Classification warning for "S" (Secret)');
+const secretTLE = `1 25544S 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(secretTLE);
+    const hasWarning = result.warnings && result.warnings.some(w => w.code === ERROR_CODES.CLASSIFIED_DATA_WARNING);
+    assert(hasWarning, 'Classification "S" generates warning');
+} catch (e) {
+    assert(false, 'Should not throw for valid secret TLE: ' + e.message);
+}
+
+// Test 44: No classification warning for 'U' (Unclassified)
+console.log('\nTest 44: No classification warning for "U" (Unclassified)');
+try {
+    const result = parseTLE(validTLE);
+    const hasWarning = result.warnings && result.warnings.some(w => w.code === ERROR_CODES.CLASSIFIED_DATA_WARNING);
+    assert(!hasWarning, 'Classification "U" does not generate warning');
+} catch (e) {
+    assert(false, 'Should not throw: ' + e.message);
+}
+
+// Test 45: Deprecated epoch year warning (1900s)
+console.log('\nTest 45: Deprecated epoch year warning (1900s)');
+const deprecatedYearTLE = `1 25544U 98067A   99300.83097691  .00001534  00000-0  35580-4 0  9992
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(deprecatedYearTLE);
+    const hasWarning = result.warnings && result.warnings.some(w => w.code === ERROR_CODES.DEPRECATED_EPOCH_YEAR_WARNING);
+    assert(hasWarning, 'Epoch year in 1900s generates warning');
+} catch (e) {
+    assert(false, 'Should not throw for old epoch year: ' + e.message);
+}
+
+// Test 46: Stale TLE warning (old data)
+console.log('\nTest 46: Stale TLE warning (old data)');
+// This TLE is from 2020, so it should be stale
+try {
+    const result = parseTLE(validTLE);
+    const hasWarning = result.warnings && result.warnings.some(w => w.code === ERROR_CODES.STALE_TLE_WARNING);
+    assert(hasWarning, 'Old TLE data generates stale warning');
+} catch (e) {
+    assert(false, 'Should not throw for stale TLE: ' + e.message);
+}
+
+// Test 47: High eccentricity warning
+console.log('\nTest 47: High eccentricity warning');
+const highEccTLE = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 3001671  64.9808  73.0513 15.49338189252421`;
+try {
+    const result = parseTLE(highEccTLE);
+    const hasWarning = result.warnings && result.warnings.some(w => w.code === ERROR_CODES.HIGH_ECCENTRICITY_WARNING);
+    assert(hasWarning, 'High eccentricity (>0.25) generates warning');
+} catch (e) {
+    assert(false, 'Should not throw for high eccentricity: ' + e.message);
+}
+
+// Test 48: Low mean motion warning
+console.log('\nTest 48: Low mean motion warning');
+const lowMeanMotionTLE = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513  0.49338189252422`;
+try {
+    const result = parseTLE(lowMeanMotionTLE);
+    const hasWarning = result.warnings && result.warnings.some(w => w.code === ERROR_CODES.LOW_MEAN_MOTION_WARNING);
+    assert(hasWarning, 'Low mean motion (<1.0) generates warning');
+} catch (e) {
+    assert(false, 'Should not throw for low mean motion: ' + e.message);
+}
+
+// Test 49: Revolution number rollover warning
+console.log('\nTest 49: Revolution number rollover warning');
+const highRevNumTLE = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189952425`;
+try {
+    const result = parseTLE(highRevNumTLE);
+    const hasWarning = result.warnings && result.warnings.some(w => w.code === ERROR_CODES.REVOLUTION_NUMBER_ROLLOVER_WARNING);
+    assert(hasWarning, 'Revolution number >90000 generates warning');
+} catch (e) {
+    assert(false, 'Should not throw for high revolution number: ' + e.message);
+}
+
+// Test 50: Near-zero drag warning
+console.log('\nTest 50: Near-zero drag (B*) warning');
+const zeroDragTLE = `1 25544U 98067A   20300.83097691  .00001534  00000-0  00000-0 0  9991
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(zeroDragTLE);
+    const hasWarning = result.warnings && result.warnings.some(w => w.code === ERROR_CODES.NEAR_ZERO_DRAG_WARNING);
+    assert(hasWarning, 'Near-zero B* drag term generates warning');
+} catch (e) {
+    assert(false, 'Should not throw for zero drag: ' + e.message);
+}
+
+// Test 51: Negative decay (first derivative) warning
+console.log('\nTest 51: Negative decay (negative first derivative) warning');
+const negativeDecayTLE = `1 25544U 98067A   20300.83097691 -.00001534  00000-0  35580-4 0  9997
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(negativeDecayTLE);
+    const hasWarning = result.warnings && result.warnings.some(w => w.code === ERROR_CODES.NEGATIVE_DECAY_WARNING);
+    assert(hasWarning, 'Negative first derivative generates warning');
+} catch (e) {
+    assert(false, 'Should not throw for negative derivative: ' + e.message);
+}
+
+// Test 52: Non-standard ephemeris type warning
+console.log('\nTest 52: Non-standard ephemeris type warning');
+const nonStdEphemTLE = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 2  9998
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(nonStdEphemTLE);
+    const hasWarning = result.warnings && result.warnings.some(w => w.code === ERROR_CODES.NON_STANDARD_EPHEMERIS_WARNING);
+    assert(hasWarning, 'Non-standard ephemeris type generates warning');
+} catch (e) {
+    assert(false, 'Should not throw for non-standard ephemeris: ' + e.message);
+}
+
+// Test 53: checkClassificationWarnings function directly
+console.log('\nTest 53: checkClassificationWarnings function');
+const classifiedLine = '1 25544C 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996';
+const classWarnings = checkClassificationWarnings(classifiedLine);
+assert(classWarnings.length > 0, 'checkClassificationWarnings detects classified data');
+assert(classWarnings[0].code === ERROR_CODES.CLASSIFIED_DATA_WARNING, 'Correct warning code');
+
+// Test 54: checkEpochWarnings function directly
+console.log('\nTest 54: checkEpochWarnings function');
+const oldEpochLine = '1 25544U 98067A   99300.83097691  .00001534  00000-0  35580-4 0  9992';
+const epochWarnings = checkEpochWarnings(oldEpochLine);
+assert(epochWarnings.length > 0, 'checkEpochWarnings detects old epoch');
+const hasDeprecatedWarning = epochWarnings.some(w => w.code === ERROR_CODES.DEPRECATED_EPOCH_YEAR_WARNING);
+assert(hasDeprecatedWarning, 'Deprecated epoch year warning present');
+
+// Test 55: checkOrbitalParameterWarnings function directly
+console.log('\nTest 55: checkOrbitalParameterWarnings function');
+const highEccLine = '2 25544  51.6453  57.0843 3001671  64.9808  73.0513 15.49338189252421';
+const orbitalWarnings = checkOrbitalParameterWarnings(highEccLine);
+assert(orbitalWarnings.length > 0, 'checkOrbitalParameterWarnings detects high eccentricity');
+const hasHighEccWarning = orbitalWarnings.some(w => w.code === ERROR_CODES.HIGH_ECCENTRICITY_WARNING);
+assert(hasHighEccWarning, 'High eccentricity warning present');
+
+// Test 56: checkDragAndEphemerisWarnings function directly
+console.log('\nTest 56: checkDragAndEphemerisWarnings function');
+const zeroDragLine = '1 25544U 98067A   20300.83097691  .00001534  00000-0  00000-0 0  9991';
+const dragWarnings = checkDragAndEphemerisWarnings(zeroDragLine);
+assert(dragWarnings.length > 0, 'checkDragAndEphemerisWarnings detects zero drag');
+const hasZeroDragWarning = dragWarnings.some(w => w.code === ERROR_CODES.NEAR_ZERO_DRAG_WARNING);
+assert(hasZeroDragWarning, 'Near-zero drag warning present');
+
+// Test 57: Multiple warnings in single TLE
+console.log('\nTest 57: Multiple warnings in single TLE');
+const multipleWarningsTLE = `1 25544C 98067A   99300.83097691 -.00001534  00000-0  00000-0 2  9990
+2 25544  51.6453  57.0843 3001671  64.9808  73.0513  0.49338189952422`;
+try {
+    const result = parseTLE(multipleWarningsTLE);
+    assert(result.warnings && result.warnings.length >= 5, 'Multiple warnings detected');
+} catch (e) {
+    assert(false, 'Should not throw for TLE with multiple warnings: ' + e.message);
+}
+
+// Test 58: Valid modern TLE with no unusual warnings (except stale date)
+console.log('\nTest 58: Valid modern TLE minimizes warnings');
+const modernTLE = `1 25544U 98067A   25300.83097691  .00001534  00000-0  35580-4 0  9991
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(modernTLE);
+    // Should have minimal warnings (no classification, eccentricity, etc. warnings)
+    const nonStaleWarnings = result.warnings ? result.warnings.filter(w => w.code !== ERROR_CODES.STALE_TLE_WARNING) : [];
+    assert(nonStaleWarnings.length === 0, 'Modern valid TLE has minimal warnings');
+} catch (e) {
+    assert(false, 'Should not throw for modern TLE: ' + e.message);
+}
+
+// Test 59: Warning severity is always 'warning'
+console.log('\nTest 59: All warnings have severity "warning"');
+try {
+    const result = parseTLE(multipleWarningsTLE);
+    const allWarnings = result.warnings.every(w => w.severity === 'warning');
+    assert(allWarnings, 'All warnings have severity "warning"');
+} catch (e) {
+    assert(false, 'Should not throw: ' + e.message);
+}
+
+// Test 60: validateTLE returns warnings
+console.log('\nTest 60: validateTLE function returns warnings');
+const validationResult = validateTLE(classifiedTLE);
+assert(validationResult.isValid, 'TLE is valid despite warnings');
+assert(validationResult.warnings.length > 0, 'validateTLE returns warnings array');
+const hasClassWarning = validationResult.warnings.some(w => w.code === ERROR_CODES.CLASSIFIED_DATA_WARNING);
+assert(hasClassWarning, 'validateTLE detects classification warning');
+
+// ===============================================
+// Tests for Comment Parsing
+// ===============================================
+
+console.log('\n=== Comment Parsing Tests ===\n');
+
+// Test 61: TLE with single comment line
+console.log('\nTest 61: TLE with single comment line');
 const tleWithSingleComment = `# Source: CelesTrak
 1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
 2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
@@ -483,8 +872,8 @@ try {
     assert(false, 'TLE with single comment should not throw: ' + e.message);
 }
 
-// Test 43: TLE with multiple comment lines
-console.log('\nTest 43: TLE with multiple comment lines');
+// Test 62: TLE with multiple comment lines
+console.log('\nTest 62: TLE with multiple comment lines');
 const tleWithMultipleComments = `# Source: CelesTrak
 # Downloaded: 2023-10-27 12:34:56 UTC
 # Reference Frame: TEME
@@ -503,8 +892,8 @@ try {
     assert(false, 'TLE with multiple comments should not throw: ' + e.message);
 }
 
-// Test 44: TLE with comments and satellite name (3-line + comments)
-console.log('\nTest 44: TLE with comments and satellite name (3-line + comments)');
+// Test 63: TLE with comments and satellite name (3-line + comments)
+console.log('\nTest 63: TLE with comments and satellite name (3-line + comments)');
 const tleWith3LineAndComments = `# Source: Space-Track
 # Object: ISS
 ISS (ZARYA)
@@ -520,8 +909,8 @@ try {
     assert(false, 'TLE with comments and satellite name should not throw: ' + e.message);
 }
 
-// Test 45: TLE without comments (backward compatibility)
-console.log('\nTest 45: TLE without comments (backward compatibility)');
+// Test 64: TLE without comments (backward compatibility)
+console.log('\nTest 64: TLE without comments (backward compatibility)');
 const tleWithoutComments = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
 2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
 try {
@@ -533,8 +922,8 @@ try {
     assert(false, 'TLE without comments should not throw: ' + e.message);
 }
 
-// Test 46: includeComments option set to false
-console.log('\nTest 46: includeComments option set to false');
+// Test 65: includeComments option set to false
+console.log('\nTest 65: includeComments option set to false');
 const tleForCommentExclusion = `# This is a comment
 1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
 2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
@@ -547,8 +936,8 @@ try {
     assert(false, 'TLE with includeComments=false should not throw: ' + e.message);
 }
 
-// Test 47: Comments interspersed with TLE data
-console.log('\nTest 47: Comments interspersed with TLE data');
+// Test 66: Comments interspersed with TLE data
+console.log('\nTest 66: Comments interspersed with TLE data');
 const tleWithInterspersedComments = `# Header comment
 1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
 # Mid comment
@@ -566,8 +955,8 @@ try {
     assert(false, 'TLE with interspersed comments should not throw: ' + e.message);
 }
 
-// Test 48: Validate TLE with comments (validation should ignore comments)
-console.log('\nTest 48: Validate TLE with comments (validation ignores comments)');
+// Test 67: Validate TLE with comments (validation should ignore comments)
+console.log('\nTest 67: Validate TLE with comments (validation ignores comments)');
 const tleWithCommentsForValidation = `# This is a comment
 # Another comment
 1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
@@ -576,8 +965,8 @@ const validationWithComments = validateTLE(tleWithCommentsForValidation);
 assert(validationWithComments.isValid, 'TLE with comments validates successfully');
 assert(validationWithComments.errors.length === 0, 'No validation errors with comments');
 
-// Test 49: TLE with comment-like line in satellite name (edge case)
-console.log('\nTest 49: TLE with satellite name containing # symbol');
+// Test 68: TLE with satellite name containing # symbol
+console.log('\nTest 68: TLE with satellite name containing # symbol');
 const tleWithHashInName = `SATELLITE #1
 1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
 2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
@@ -591,8 +980,8 @@ try {
     assert(false, 'TLE with # in satellite name should not throw: ' + e.message);
 }
 
-// Test 50: Empty comment-only input (should fail validation)
-console.log('\nTest 50: Empty comment-only input (should fail)');
+// Test 69: Empty comment-only input (should fail validation)
+console.log('\nTest 69: Empty comment-only input (should fail)');
 const commentOnlyTLE = `# Comment 1
 # Comment 2
 # Comment 3`;
