@@ -1,0 +1,21 @@
+{
+  "name": "tle-parser-vue-composables",
+  "version": "1.0.0",
+  "description": "Vue 3 Composition API composables for TLE Parser",
+  "main": "useTLE.ts",
+  "types": "useTLE.ts",
+  "keywords": [
+    "tle",
+    "satellite",
+    "vue",
+    "vue3",
+    "composition-api",
+    "tracking"
+  ],
+  "peerDependencies": {
+    "vue": "^3.0.0",
+    "tle-parser": "^1.0.0"
+  },
+  "dependencies": {},
+  "license": "MIT"
+}

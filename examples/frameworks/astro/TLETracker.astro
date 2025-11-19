@@ -1,0 +1,105 @@
+---
+/**
+ * Astro Component for TLE Tracking
+ *
+ * This component demonstrates server-side TLE parsing with client-side interactivity.
+ */
+import { parseTLE, calculatePosition } from 'tle-parser';
+
+// Server-side TLE parsing
+const line1 = "1 25544U 98067A   21001.00000000  .00002182  00000-0  41420-4 0  9990";
+const line2 = "2 25544  51.6461 339.8014 0002571  34.5857 120.4689 15.48919393265018";
+const tle = parseTLE(line1, line2, "ISS (ZARYA)");
+const position = calculatePosition(tle, new Date());
+---
+
+<div class="tle-tracker">
+  <h2>🛰️ {tle.satelliteName}</h2>
+
+  <div class="info">
+    <h3>Orbital Elements</h3>
+    <p><strong>Satellite Number:</strong> {tle.satelliteNumber}</p>
+    <p><strong>Inclination:</strong> {tle.inclination.toFixed(4)}°</p>
+    <p><strong>Eccentricity:</strong> {tle.eccentricity.toFixed(7)}</p>
+    <p><strong>Mean Motion:</strong> {tle.meanMotion.toFixed(8)} rev/day</p>
+    <p><strong>Epoch:</strong> {tle.epochDate.toLocaleString()}</p>
+  </div>
+
+  <div class="position">
+    <h3>Current Position</h3>
+    <p><strong>Latitude:</strong> {position.latitude.toFixed(4)}°</p>
+    <p><strong>Longitude:</strong> {position.longitude.toFixed(4)}°</p>
+    <p><strong>Altitude:</strong> {position.altitude.toFixed(2)} km</p>
+  </div>
+
+  <!-- Client-side tracking component -->
+  <div id="live-tracker" data-tle={JSON.stringify(tle)}>
+    <button id="start-tracking">Start Live Tracking</button>
+    <div id="live-position"></div>
+  </div>
+</div>
+
+<script>
+  import { calculatePosition } from 'tle-parser';
+
+  const trackerEl = document.getElementById('live-tracker');
+  const startBtn = document.getElementById('start-tracking');
+  const positionEl = document.getElementById('live-position');
+
+  if (trackerEl && startBtn && positionEl) {
+    const tleData = JSON.parse(trackerEl.dataset.tle || '{}');
+    let intervalId: number | null = null;
+
+    startBtn.addEventListener('click', () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+        startBtn.textContent = 'Start Live Tracking';
+      } else {
+        intervalId = setInterval(() => {
+          const pos = calculatePosition(tleData, new Date());
+          positionEl.innerHTML = `
+            <p>Latitude: ${pos.latitude.toFixed(4)}°</p>
+            <p>Longitude: ${pos.longitude.toFixed(4)}°</p>
+            <p>Altitude: ${pos.altitude.toFixed(2)} km</p>
+            <p>Updated: ${new Date().toLocaleTimeString()}</p>
+          `;
+        }, 1000);
+        startBtn.textContent = 'Stop Tracking';
+      }
+    });
+  }
+</script>
+
+<style>
+  .tle-tracker {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+
+  .info, .position {
+    margin: 20px 0;
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+  }
+
+  #live-tracker {
+    margin-top: 20px;
+  }
+
+  button {
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+    background: #0066cc;
+    color: white;
+    border: none;
+    border-radius: 4px;
+  }
+
+  button:hover {
+    background: #0052a3;
+  }
+</style>
