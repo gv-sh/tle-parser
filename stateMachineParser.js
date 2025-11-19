@@ -1,4 +1,4 @@
-const { ERROR_CODES } = require('./index');
+const { ERROR_CODES } = require('./errorCodes');
 
 /**
  * Parser states for the state machine
