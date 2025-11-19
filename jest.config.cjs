@@ -24,5 +24,11 @@ module.exports = {
   ],
   preset: 'ts-jest',
   verbose: true,
-  testTimeout: 30000
+  testTimeout: 30000,
+  globals: {
+    'ts-jest': {
+      tsconfig: 'tsconfig.test.json',
+      isolatedModules: true
+    }
+  }
 };
