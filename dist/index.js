@@ -22,7 +22,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TLEFormatError = exports.TLEValidationError = exports.ErrorSeverity = exports.RecoveryAction = exports.ParserState = exports.parseWithStateMachine = exports.TLEStateMachineParser = exports.isCriticalError = exports.isWarningCode = exports.getErrorDescription = exports.isValidErrorCode = exports.ERROR_CODES = void 0;
+exports.TLEFormatError = exports.TLEValidationError = exports.PlanetariumFormat = exports.CoordinateFrame = exports.reconstructTLEFromParsedObject = exports.tleToLegacyFormat = exports.createCustomFormat = exports.tleToCustomFormat = exports.tleToPlanetarium = exports.tleToCelestia = exports.tleToStellarium = exports.transformCoordinateFrame = exports.tleToGPSAlmanac = exports.keplerianToCartesian = exports.tleToStateVector = exports.extractKeplerianElements = exports.oemToText = exports.tleToOEM = exports.kvnToText = exports.tleToKVN = exports.stkToFile = exports.tleToSTK = exports.ommToXML = exports.ommToTLE = exports.tleToOMM = exports.groupIntoOrbitalFamilies = exports.validateAgainstRadar = exports.calculateConjunctionProbability = exports.classifyOrbitType = exports.analyzeTrend = exports.calculateQualityMetrics = exports.analyzeConstellation = exports.detectTLEAnomalies = exports.calculateUpdateFrequency = exports.analyzeOrbitalDecay = exports.assessTLEStaleness = exports.generateTLEDiff = exports.compareTLEs = exports.OrbitType = exports.ErrorSeverity = exports.RecoveryAction = exports.ParserState = exports.parseWithStateMachine = exports.TLEStateMachineParser = exports.isCriticalError = exports.isWarningCode = exports.getErrorDescription = exports.isValidErrorCode = exports.ERROR_CODES = void 0;
 exports.normalizeLineEndings = normalizeLineEndings;
 exports.parseTLELines = parseTLELines;
 exports.calculateChecksum = calculateChecksum;
@@ -68,6 +68,46 @@ __exportStar(require("./constellations"), exports);
 __exportStar(require("./scheduler"), exports);
 // Re-export orbital calculations features (Week 5)
 __exportStar(require("./orbitalCalculations"), exports);
+// Re-export data analysis and format conversion features (Week 6)
+var dataAnalysis_1 = require("./dataAnalysis");
+Object.defineProperty(exports, "OrbitType", { enumerable: true, get: function () { return dataAnalysis_1.OrbitType; } });
+Object.defineProperty(exports, "compareTLEs", { enumerable: true, get: function () { return dataAnalysis_1.compareTLEs; } });
+Object.defineProperty(exports, "generateTLEDiff", { enumerable: true, get: function () { return dataAnalysis_1.generateTLEDiff; } });
+Object.defineProperty(exports, "assessTLEStaleness", { enumerable: true, get: function () { return dataAnalysis_1.assessTLEStaleness; } });
+Object.defineProperty(exports, "analyzeOrbitalDecay", { enumerable: true, get: function () { return dataAnalysis_1.analyzeOrbitalDecay; } });
+Object.defineProperty(exports, "calculateUpdateFrequency", { enumerable: true, get: function () { return dataAnalysis_1.calculateUpdateFrequency; } });
+Object.defineProperty(exports, "detectTLEAnomalies", { enumerable: true, get: function () { return dataAnalysis_1.detectAnomalies; } });
+Object.defineProperty(exports, "analyzeConstellation", { enumerable: true, get: function () { return dataAnalysis_1.analyzeConstellation; } });
+Object.defineProperty(exports, "calculateQualityMetrics", { enumerable: true, get: function () { return dataAnalysis_1.calculateQualityMetrics; } });
+Object.defineProperty(exports, "analyzeTrend", { enumerable: true, get: function () { return dataAnalysis_1.analyzeTrend; } });
+Object.defineProperty(exports, "classifyOrbitType", { enumerable: true, get: function () { return dataAnalysis_1.classifyOrbitType; } });
+Object.defineProperty(exports, "calculateConjunctionProbability", { enumerable: true, get: function () { return dataAnalysis_1.calculateConjunctionProbability; } });
+Object.defineProperty(exports, "validateAgainstRadar", { enumerable: true, get: function () { return dataAnalysis_1.validateAgainstRadar; } });
+Object.defineProperty(exports, "groupIntoOrbitalFamilies", { enumerable: true, get: function () { return dataAnalysis_1.groupIntoOrbitalFamilies; } });
+var formatConversion_1 = require("./formatConversion");
+Object.defineProperty(exports, "tleToOMM", { enumerable: true, get: function () { return formatConversion_1.tleToOMM; } });
+Object.defineProperty(exports, "ommToTLE", { enumerable: true, get: function () { return formatConversion_1.ommToTLE; } });
+Object.defineProperty(exports, "ommToXML", { enumerable: true, get: function () { return formatConversion_1.ommToXML; } });
+Object.defineProperty(exports, "tleToSTK", { enumerable: true, get: function () { return formatConversion_1.tleToSTK; } });
+Object.defineProperty(exports, "stkToFile", { enumerable: true, get: function () { return formatConversion_1.stkToFile; } });
+Object.defineProperty(exports, "tleToKVN", { enumerable: true, get: function () { return formatConversion_1.tleToKVN; } });
+Object.defineProperty(exports, "kvnToText", { enumerable: true, get: function () { return formatConversion_1.kvnToText; } });
+Object.defineProperty(exports, "tleToOEM", { enumerable: true, get: function () { return formatConversion_1.tleToOEM; } });
+Object.defineProperty(exports, "oemToText", { enumerable: true, get: function () { return formatConversion_1.oemToText; } });
+Object.defineProperty(exports, "extractKeplerianElements", { enumerable: true, get: function () { return formatConversion_1.extractKeplerianElements; } });
+Object.defineProperty(exports, "tleToStateVector", { enumerable: true, get: function () { return formatConversion_1.tleToStateVector; } });
+Object.defineProperty(exports, "keplerianToCartesian", { enumerable: true, get: function () { return formatConversion_1.keplerianToCartesian; } });
+Object.defineProperty(exports, "tleToGPSAlmanac", { enumerable: true, get: function () { return formatConversion_1.tleToGPSAlmanac; } });
+Object.defineProperty(exports, "transformCoordinateFrame", { enumerable: true, get: function () { return formatConversion_1.transformCoordinateFrame; } });
+Object.defineProperty(exports, "tleToStellarium", { enumerable: true, get: function () { return formatConversion_1.tleToStellarium; } });
+Object.defineProperty(exports, "tleToCelestia", { enumerable: true, get: function () { return formatConversion_1.tleToCelestia; } });
+Object.defineProperty(exports, "tleToPlanetarium", { enumerable: true, get: function () { return formatConversion_1.tleToPlanetarium; } });
+Object.defineProperty(exports, "tleToCustomFormat", { enumerable: true, get: function () { return formatConversion_1.tleToCustomFormat; } });
+Object.defineProperty(exports, "createCustomFormat", { enumerable: true, get: function () { return formatConversion_1.createCustomFormat; } });
+Object.defineProperty(exports, "tleToLegacyFormat", { enumerable: true, get: function () { return formatConversion_1.tleToLegacyFormat; } });
+Object.defineProperty(exports, "reconstructTLEFromParsedObject", { enumerable: true, get: function () { return formatConversion_1.reconstructTLE; } });
+Object.defineProperty(exports, "CoordinateFrame", { enumerable: true, get: function () { return formatConversion_1.CoordinateFrame; } });
+Object.defineProperty(exports, "PlanetariumFormat", { enumerable: true, get: function () { return formatConversion_1.PlanetariumFormat; } });
 // Load the TLE configuration from imported JSON
 const tleConfig = tleConfig_json_1.default;
 // ============================================================================

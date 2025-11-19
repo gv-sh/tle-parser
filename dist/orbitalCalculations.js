@@ -247,8 +247,8 @@ function calculateLookAngles(tle, observerLocation, date) {
     // Calculate look angles
     const lookAngles = satellite.ecfToLookAngles(observerGd, positionEcf);
     return {
-        azimuth: satellite.degreesLong(lookAngles.azimuth),
-        elevation: satellite.degreesLat(lookAngles.elevation),
+        azimuth: lookAngles.azimuth * (180 / Math.PI), // Convert radians to degrees
+        elevation: lookAngles.elevation * (180 / Math.PI), // Convert radians to degrees
         range: lookAngles.rangeSat,
     };
 }
