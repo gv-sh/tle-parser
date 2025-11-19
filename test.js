@@ -848,6 +848,150 @@ assert(validationResult.isValid, 'TLE is valid despite warnings');
 assert(validationResult.warnings.length > 0, 'validateTLE returns warnings array');
 const hasClassWarning = validationResult.warnings.some(w => w.code === ERROR_CODES.CLASSIFIED_DATA_WARNING);
 assert(hasClassWarning, 'validateTLE detects classification warning');
+
+// ===============================================
+// Tests for Comment Parsing
+// ===============================================
+
+console.log('\n=== Comment Parsing Tests ===\n');
+
+// Test 61: TLE with single comment line
+console.log('\nTest 61: TLE with single comment line');
+const tleWithSingleComment = `# Source: CelesTrak
+1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(tleWithSingleComment);
+    assert(result !== null, 'Parse TLE with single comment');
+    assert(result.comments !== undefined, 'Comments field exists');
+    assert(Array.isArray(result.comments), 'Comments is an array');
+    assertEquals(result.comments.length, 1, 'One comment line extracted');
+    assertEquals(result.comments[0], '# Source: CelesTrak', 'Comment content is correct');
+    assertEquals(result.satelliteNumber1, '25544', 'TLE data parsed correctly');
+} catch (e) {
+    assert(false, 'TLE with single comment should not throw: ' + e.message);
+}
+
+// Test 62: TLE with multiple comment lines
+console.log('\nTest 62: TLE with multiple comment lines');
+const tleWithMultipleComments = `# Source: CelesTrak
+# Downloaded: 2023-10-27 12:34:56 UTC
+# Reference Frame: TEME
+1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(tleWithMultipleComments);
+    assert(result !== null, 'Parse TLE with multiple comments');
+    assert(result.comments !== undefined, 'Comments field exists');
+    assertEquals(result.comments.length, 3, 'Three comment lines extracted');
+    assertEquals(result.comments[0], '# Source: CelesTrak', 'First comment is correct');
+    assertEquals(result.comments[1], '# Downloaded: 2023-10-27 12:34:56 UTC', 'Second comment is correct');
+    assertEquals(result.comments[2], '# Reference Frame: TEME', 'Third comment is correct');
+    assertEquals(result.satelliteNumber1, '25544', 'TLE data parsed correctly');
+} catch (e) {
+    assert(false, 'TLE with multiple comments should not throw: ' + e.message);
+}
+
+// Test 63: TLE with comments and satellite name (3-line + comments)
+console.log('\nTest 63: TLE with comments and satellite name (3-line + comments)');
+const tleWith3LineAndComments = `# Source: Space-Track
+# Object: ISS
+ISS (ZARYA)
+1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(tleWith3LineAndComments);
+    assert(result !== null, 'Parse TLE with comments and satellite name');
+    assertEquals(result.comments.length, 2, 'Two comment lines extracted');
+    assertEquals(result.satelliteName, 'ISS (ZARYA)', 'Satellite name extracted correctly');
+    assertEquals(result.satelliteNumber1, '25544', 'TLE data parsed correctly');
+} catch (e) {
+    assert(false, 'TLE with comments and satellite name should not throw: ' + e.message);
+}
+
+// Test 64: TLE without comments (backward compatibility)
+console.log('\nTest 64: TLE without comments (backward compatibility)');
+const tleWithoutComments = `1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(tleWithoutComments);
+    assert(result !== null, 'Parse TLE without comments');
+    assert(result.comments === undefined, 'No comments field when no comments present');
+    assertEquals(result.satelliteNumber1, '25544', 'TLE data parsed correctly');
+} catch (e) {
+    assert(false, 'TLE without comments should not throw: ' + e.message);
+}
+
+// Test 65: includeComments option set to false
+console.log('\nTest 65: includeComments option set to false');
+const tleForCommentExclusion = `# This is a comment
+1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(tleForCommentExclusion, { includeComments: false });
+    assert(result !== null, 'Parse TLE with includeComments=false');
+    assert(result.comments === undefined, 'Comments field not included when includeComments=false');
+    assertEquals(result.satelliteNumber1, '25544', 'TLE data parsed correctly');
+} catch (e) {
+    assert(false, 'TLE with includeComments=false should not throw: ' + e.message);
+}
+
+// Test 66: Comments interspersed with TLE data
+console.log('\nTest 66: Comments interspersed with TLE data');
+const tleWithInterspersedComments = `# Header comment
+1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+# Mid comment
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428
+# Footer comment`;
+try {
+    const result = parseTLE(tleWithInterspersedComments);
+    assert(result !== null, 'Parse TLE with interspersed comments');
+    assertEquals(result.comments.length, 3, 'Three comment lines extracted');
+    assertEquals(result.comments[0], '# Header comment', 'First comment is correct');
+    assertEquals(result.comments[1], '# Mid comment', 'Second comment is correct');
+    assertEquals(result.comments[2], '# Footer comment', 'Third comment is correct');
+    assertEquals(result.satelliteNumber1, '25544', 'TLE data parsed correctly');
+} catch (e) {
+    assert(false, 'TLE with interspersed comments should not throw: ' + e.message);
+}
+
+// Test 67: Validate TLE with comments (validation should ignore comments)
+console.log('\nTest 67: Validate TLE with comments (validation ignores comments)');
+const tleWithCommentsForValidation = `# This is a comment
+# Another comment
+1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+const validationWithComments = validateTLE(tleWithCommentsForValidation);
+assert(validationWithComments.isValid, 'TLE with comments validates successfully');
+assert(validationWithComments.errors.length === 0, 'No validation errors with comments');
+
+// Test 68: TLE with satellite name containing # symbol
+console.log('\nTest 68: TLE with satellite name containing # symbol');
+const tleWithHashInName = `SATELLITE #1
+1 25544U 98067A   20300.83097691  .00001534  00000-0  35580-4 0  9996
+2 25544  51.6453  57.0843 0001671  64.9808  73.0513 15.49338189252428`;
+try {
+    const result = parseTLE(tleWithHashInName);
+    assert(result !== null, 'Parse TLE with # in satellite name');
+    // Line starting with # at position 0 is treated as comment, but "SATELLITE #1" doesn't start with #
+    assertEquals(result.satelliteName, 'SATELLITE #1', 'Satellite name with # preserved');
+    assertEquals(result.satelliteNumber1, '25544', 'TLE data parsed correctly');
+} catch (e) {
+    assert(false, 'TLE with # in satellite name should not throw: ' + e.message);
+}
+
+// Test 69: Empty comment-only input (should fail validation)
+console.log('\nTest 69: Empty comment-only input (should fail)');
+const commentOnlyTLE = `# Comment 1
+# Comment 2
+# Comment 3`;
+try {
+    parseTLE(commentOnlyTLE);
+    assert(false, 'Comment-only TLE should throw error');
+} catch (e) {
+    assert(true, 'Comment-only TLE throws error as expected');
+}
+
 console.log('\n=== Test Summary ===');
 console.log(`Total Tests: ${testsPassed + testsFailed}`);
 console.log(`Passed: ${testsPassed}`);

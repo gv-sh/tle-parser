@@ -558,8 +558,10 @@ function validateTLE(tleString, options = {}) {
     // Normalize line endings (handle CRLF, LF, CR)
     const normalizedTLE = normalizeLineEndings(tleString);
 
-    // Parse lines
-    const tleLines = normalizedTLE.trim().split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    // Parse lines and filter out comment lines (starting with #)
+    const tleLines = normalizedTLE.trim().split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0 && !line.startsWith('#'));
 
     // Check number of lines (can be 2 or 3, where line 0 is satellite name)
     if (tleLines.length < 2) {
@@ -884,8 +886,8 @@ function validateTLE(tleString, options = {}) {
 /**
  * Parse TLE data with optional validation
  * @param {string} tleString - The TLE data string
- * @param {object} options - Parsing options {validate: boolean, strictChecksums: boolean, validateRanges: boolean, includeWarnings: boolean, mode: 'strict'|'permissive'}
- * @returns {object} - Parsed TLE object with optional warnings array
+ * @param {object} options - Parsing options {validate: boolean, strictChecksums: boolean, validateRanges: boolean, includeWarnings: boolean, includeComments: boolean, mode: 'strict'|'permissive'}
+ * @returns {object} - Parsed TLE object with optional warnings and comments arrays
  * @throws {TypeError} - If input types are invalid
  * @throws {TLEValidationError} - If validation fails and validate option is true
  */
@@ -904,6 +906,7 @@ function parseTLE(tleString, options = {}) {
         strictChecksums = true,
         validateRanges = true,
         includeWarnings = true,
+        includeComments = true,
         mode = 'strict'
     } = options;
 
@@ -929,7 +932,10 @@ function parseTLE(tleString, options = {}) {
     // Normalize line endings (handle CRLF, LF, CR)
     const normalizedTLE = normalizeLineEndings(tleString);
 
-    const tleLines = normalizedTLE.trim().split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    // Parse all lines and separate comments from TLE data
+    const allLines = normalizedTLE.trim().split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    const comments = allLines.filter(line => line.startsWith('#'));
+    const tleLines = allLines.filter(line => !line.startsWith('#'));
 
     // Determine line indices
     let line1Index = 0;
@@ -965,6 +971,11 @@ function parseTLE(tleString, options = {}) {
     // Include warnings in the result if requested and available
     if (includeWarnings && validationWarnings.length > 0) {
         tleObject.warnings = validationWarnings;
+    }
+
+    // Include comments in the result if requested and available
+    if (includeComments && comments.length > 0) {
+        tleObject.comments = comments;
     }
 
     return tleObject;
