@@ -23,6 +23,7 @@
   "files": [
     "dist/**/*",
     "src/**/*",
+    "completions/**/*",
     "README.md",
     "LICENSE"
   ],
