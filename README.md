@@ -23,6 +23,25 @@ A robust parser for TLE (Two-Line Element) satellite data with comprehensive inp
   - Tab character handling and conversion
   - Unicode character support in satellite names
 
+## Documentation
+
+Comprehensive documentation is available in the [docs](docs/) directory:
+
+- **[Complete Documentation Index](docs/README.md)** - Start here for all documentation
+- **[API Reference](docs/api/API_REFERENCE.md)** - Complete function documentation
+- **[Usage Examples](docs/guides/USAGE_EXAMPLES.md)** - Practical code examples
+- **[FAQ](docs/FAQ.md)** - Frequently asked questions
+
+### Understanding TLEs
+- **[TLE Format Guide](docs/guides/TLE_FORMAT.md)** - Detailed field descriptions
+- **[TLE Structure Diagrams](docs/guides/TLE_STRUCTURE.md)** - Visual reference
+- **[Orbital Mechanics](docs/guides/ORBITAL_MECHANICS.md)** - Physics concepts explained
+
+### Guides
+- **[Error Handling](docs/guides/ERROR_HANDLING.md)** - Error patterns and recovery
+- **[Troubleshooting](docs/guides/TROUBLESHOOTING.md)** - Common issues and solutions
+- **[Performance Guide](docs/guides/PERFORMANCE.md)** - Optimization strategies
+
 ## Installation
 
 Clone the repository:
@@ -721,9 +740,12 @@ ISS (ZARYA)
 - **Line 1**: Catalog number, epoch, ballistic coefficients
 - **Line 2**: Orbital elements (inclination, RAAN, eccentricity, etc.)
 
-For more information about the TLE format, see:
-- [CelesTrak TLE Format FAQ](https://celestrak.org/columns/v04n03/)
-- [Wikipedia: Two-line element set](https://en.wikipedia.org/wiki/Two-line_element_set)
+For comprehensive TLE format documentation, see:
+- **[TLE Format Guide](docs/guides/TLE_FORMAT.md)** - Complete field descriptions and specifications
+- **[TLE Structure Diagrams](docs/guides/TLE_STRUCTURE.md)** - Visual breakdowns and reference tables
+- **[Orbital Mechanics Guide](docs/guides/ORBITAL_MECHANICS.md)** - Understanding orbital parameters
+- [CelesTrak TLE Format FAQ](https://celestrak.org/columns/v04n03/) - External reference
+- [Wikipedia: Two-line element set](https://en.wikipedia.org/wiki/Two-line_element_set) - External reference
 
 ## License
 
