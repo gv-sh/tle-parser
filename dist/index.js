@@ -56,6 +56,8 @@ Object.defineProperty(exports, "RecoveryAction", { enumerable: true, get: functi
 Object.defineProperty(exports, "ErrorSeverity", { enumerable: true, get: function () { return stateMachineParser_1.ErrorSeverityEnum; } });
 // Re-export advanced parser features
 __exportStar(require("./advancedParser"), exports);
+// Re-export validation and normalization features
+__exportStar(require("./validation"), exports);
 // Load the TLE configuration from imported JSON
 const tleConfig = tleConfig_json_1.default;
 // ============================================================================
