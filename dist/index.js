@@ -66,6 +66,8 @@ __exportStar(require("./cache"), exports);
 __exportStar(require("./rateLimiter"), exports);
 __exportStar(require("./constellations"), exports);
 __exportStar(require("./scheduler"), exports);
+// Re-export orbital calculations features (Week 5)
+__exportStar(require("./orbitalCalculations"), exports);
 // Load the TLE configuration from imported JSON
 const tleConfig = tleConfig_json_1.default;
 // ============================================================================

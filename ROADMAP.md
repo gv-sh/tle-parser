@@ -176,18 +176,18 @@ TLE parsers serve critical functions across multiple domains:
 - [x] Add TLE freshness validation
 
 ### Orbital Calculations
-- [ ] Integrate SGP4/SDP4 propagator for position calculation
-- [ ] Add satellite position at epoch calculation
-- [ ] Implement future position prediction
-- [ ] Calculate satellite visibility windows for ground locations
-- [ ] Add look angles (azimuth, elevation) calculation
-- [ ] Implement Doppler shift calculations for radio operators
-- [ ] Calculate eclipse predictions (satellite in Earth shadow)
-- [ ] Add orbit visualization data generation
-- [ ] Implement ground track calculation
-- [ ] Calculate orbital period and other derived parameters
-- [ ] Add satellite-to-satellite conjunction prediction
-- [ ] Implement station-keeping maneuver detection
+- [x] Integrate SGP4/SDP4 propagator for position calculation
+- [x] Add satellite position at epoch calculation
+- [x] Implement future position prediction
+- [x] Calculate satellite visibility windows for ground locations
+- [x] Add look angles (azimuth, elevation) calculation
+- [x] Implement Doppler shift calculations for radio operators
+- [x] Calculate eclipse predictions (satellite in Earth shadow)
+- [x] Add orbit visualization data generation
+- [x] Implement ground track calculation
+- [x] Calculate orbital period and other derived parameters
+- [x] Add satellite-to-satellite conjunction prediction
+- [x] Implement station-keeping maneuver detection
 
 ## Week 6: Data Analysis & Format Conversion
 

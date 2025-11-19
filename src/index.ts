@@ -50,6 +50,9 @@ export * from './rateLimiter';
 export * from './constellations';
 export * from './scheduler';
 
+// Re-export orbital calculations features (Week 5)
+export * from './orbitalCalculations';
+
 // ============================================================================
 // TLE CONFIGURATION LOADING
 // ============================================================================
