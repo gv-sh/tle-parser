@@ -37,6 +37,9 @@ export {
 // Re-export advanced parser features
 export * from './advancedParser';
 
+// Re-export validation and normalization features
+export * from './validation';
+
 // ============================================================================
 // TLE CONFIGURATION LOADING
 // ============================================================================
