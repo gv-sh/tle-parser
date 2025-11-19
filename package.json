@@ -7,6 +7,9 @@
   "module": "dist/index.mjs",
   "browser": "dist/index.browser.min.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "tle-parser": "./dist/cli.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

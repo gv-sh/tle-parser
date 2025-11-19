@@ -401,6 +401,24 @@ const configs = [
   },
 
   // ===================================================================
+  // CLI BUILD (Command-line interface)
+  // ===================================================================
+  {
+    input: 'src/cli.ts',
+    output: {
+      file: 'dist/cli.js',
+      format: 'esm',
+      sourcemap: true,
+      banner: '#!/usr/bin/env node\n' + banner
+    },
+    plugins: [
+      ...basePlugins,
+      typescriptPlugin
+    ],
+    external: ['fs', 'fs/promises', 'path', 'util', 'stream', 'zlib', 'process']
+  },
+
+  // ===================================================================
   // TYPE DEFINITIONS (Bundled .d.ts file)
   // ===================================================================
   {

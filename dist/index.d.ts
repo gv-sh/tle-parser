@@ -1584,6 +1584,160 @@ declare function generateValidationReport(tle: ParsedTLE, tleLines: {
 }, options?: ValidationOptions): ValidationReport;
 
 /**
+ * TLE Output Formats & Serialization
+ * Supports JSON, CSV, XML, YAML, and human-readable formats
+ * Includes TLE reconstruction capabilities
+ */
+
+interface OutputOptions {
+    /** Output format type */
+    format?: 'json' | 'csv' | 'xml' | 'yaml' | 'human' | 'tle';
+    /** Pretty print (for JSON, XML, YAML) */
+    pretty?: boolean;
+    /** Include warnings in output */
+    includeWarnings?: boolean;
+    /** Include comments in output */
+    includeComments?: boolean;
+    /** Verbosity level (compact, normal, verbose) */
+    verbosity?: 'compact' | 'normal' | 'verbose';
+    /** Use colors for human-readable output */
+    colors?: boolean;
+}
+interface CSVOptions extends OutputOptions {
+    /** Include header row */
+    includeHeader?: boolean;
+    /** CSV delimiter */
+    delimiter?: string;
+    /** Quote fields */
+    quote?: boolean;
+}
+interface TLEReconstructionOptions {
+    /** Include satellite name line (3-line format) */
+    includeName?: boolean;
+    /** Preserve original formatting (spaces/padding) */
+    preserveFormatting?: boolean;
+}
+declare const Colors: {
+    readonly reset: "\u001B[0m";
+    readonly bright: "\u001B[1m";
+    readonly dim: "\u001B[2m";
+    readonly black: "\u001B[30m";
+    readonly red: "\u001B[31m";
+    readonly green: "\u001B[32m";
+    readonly yellow: "\u001B[33m";
+    readonly blue: "\u001B[34m";
+    readonly magenta: "\u001B[35m";
+    readonly cyan: "\u001B[36m";
+    readonly white: "\u001B[37m";
+    readonly bgBlack: "\u001B[40m";
+    readonly bgRed: "\u001B[41m";
+    readonly bgGreen: "\u001B[42m";
+    readonly bgYellow: "\u001B[43m";
+    readonly bgBlue: "\u001B[44m";
+    readonly bgMagenta: "\u001B[45m";
+    readonly bgCyan: "\u001B[46m";
+    readonly bgWhite: "\u001B[47m";
+};
+/**
+ * Format TLE as JSON
+ *
+ * @param tle - Parsed TLE object
+ * @param options - Output options
+ * @returns JSON string
+ *
+ * @example
+ * ```typescript
+ * const json = formatAsJSON(parsedTLE, { pretty: true });
+ * console.log(json);
+ * ```
+ */
+declare function formatAsJSON(tle: ParsedTLE | ParsedTLE[], options?: OutputOptions): string;
+/**
+ * Format TLE as CSV
+ *
+ * @param tle - Parsed TLE object or array
+ * @param options - CSV output options
+ * @returns CSV string
+ *
+ * @example
+ * ```typescript
+ * const csv = formatAsCSV([tle1, tle2], { includeHeader: true });
+ * console.log(csv);
+ * ```
+ */
+declare function formatAsCSV(tle: ParsedTLE | ParsedTLE[], options?: CSVOptions): string;
+/**
+ * Format TLE as XML
+ *
+ * @param tle - Parsed TLE object or array
+ * @param options - Output options
+ * @returns XML string
+ *
+ * @example
+ * ```typescript
+ * const xml = formatAsXML(parsedTLE, { pretty: true });
+ * console.log(xml);
+ * ```
+ */
+declare function formatAsXML(tle: ParsedTLE | ParsedTLE[], options?: OutputOptions): string;
+/**
+ * Format TLE as YAML
+ *
+ * @param tle - Parsed TLE object or array
+ * @param options - Output options
+ * @returns YAML string
+ *
+ * @example
+ * ```typescript
+ * const yaml = formatAsYAML(parsedTLE);
+ * console.log(yaml);
+ * ```
+ */
+declare function formatAsYAML(tle: ParsedTLE | ParsedTLE[], options?: OutputOptions): string;
+/**
+ * Format TLE in human-readable format
+ *
+ * @param tle - Parsed TLE object
+ * @param options - Output options
+ * @returns Human-readable string
+ *
+ * @example
+ * ```typescript
+ * const human = formatAsHuman(parsedTLE, { colors: true });
+ * console.log(human);
+ * ```
+ */
+declare function formatAsHuman(tle: ParsedTLE, options?: OutputOptions): string;
+/**
+ * Reconstruct TLE string from parsed object
+ *
+ * @param tle - Parsed TLE object
+ * @param options - Reconstruction options
+ * @returns Reconstructed TLE string (2-line or 3-line format)
+ *
+ * @example
+ * ```typescript
+ * const tleString = reconstructTLE(parsedTLE, { includeName: true });
+ * console.log(tleString);
+ * ```
+ */
+declare function reconstructTLE(tle: ParsedTLE, options?: TLEReconstructionOptions): string;
+/**
+ * Format TLE in specified output format
+ *
+ * @param tle - Parsed TLE object or array
+ * @param options - Output options
+ * @returns Formatted string
+ *
+ * @example
+ * ```typescript
+ * const output = formatTLE(parsedTLE, { format: 'json', pretty: true });
+ * console.log(output);
+ * ```
+ */
+declare function formatTLE(tle: ParsedTLE | ParsedTLE[], options?: OutputOptions): string;
+
+/**
  * TLE Parser - Main Module
  * Comprehensive parser for Two-Line Element (TLE) satellite data
  * with full TypeScript support and strict type safety
@@ -1791,5 +1945,5 @@ declare const _default: {
     ERROR_CODES: typeof ERROR_CODES;
 };
 
-export { DEFAULT_VALIDATION_RULES, DESIGNATOR_CONSTRAINTS, EPOCH_CONSTRAINTS, ERROR_CODES, ErrorSeverityEnum as ErrorSeverity, IncrementalParser, MiddlewareParser, ORBITAL_PARAMETER_RANGES, ParserState, QUALITY_SCORE_WEIGHTS, RecoveryAction, SATELLITE_NUMBER_RANGES, TLECache, TLEErrorCode, TLEFormatError, TLEParserStream, TLEStateMachineParser, TLEValidationError, ValidationRuleManager, applyFilter, calculateChecksum, calculateEpochAge, calculateQualityScore, checkClassificationWarnings, checkDragAndEphemerisWarnings, checkEpochWarnings, checkOrbitalParameterWarnings, convertEpochToDate, createCachedParser, createIncrementalParser, createMiddlewareParser, createTLEParserStream, createValidationRule, _default as default, detectAnomalies, generateValidationReport, getErrorDescription, getProfileOptions, getProviderOptions, isCriticalError, isParseFailure, isParseSuccess, isParsedTLE, isTLEError, isTLEWarning, isValidClassification, isValidErrorCode, isValidationFailure, isValidationSuccess, isWarningCode, normalizeAssumedDecimalNotation, normalizeLineEndings, normalizeScientificNotation, parseBatch, parseBatchAsync, parseFromCompressed, parseFromFile, parseFromStream, parseFromURL, parseParallel, parseTLE, parseTLEAsync, parseTLELines, parseWithProfile, parseWithProvider, parseWithStateMachine, sanitizeAllFields, sanitizeField, splitTLEs, validateAllOrbitalParameters, validateChecksum, validateClassification, validateEpochAge, validateEpochDate, validateInternationalDesignator, validateLineStructure, validateNumericRange, validateOrbitalParameter, validateSatelliteNumber, validateTLE, validateTLEAsync };
-export type { AnomalyDetectionResult, ArgumentOfPerigee, BatchParseOptions, CacheOptions, Checksum, ChecksumValidationResult, Classification, ClassificationType, ClassificationValidationResult, DataQualityScore, Eccentricity, ElementSetNumber, EphemerisType, EpochDate, EpochDay, EpochYear, ExtendedParsedTLE, FieldExtractor, FieldParser, FieldSanitizationResult, ITLEFormatError, ITLEValidationError, Inclination, InternationalDesignatorLaunchNumber, InternationalDesignatorYear, LegacyValidationResult, LineValidationResult, MeanAnomaly, MeanMotion, MiddlewareContext, MiddlewarePlugin, MultiSourceOptions, Mutable, NumericRangeValidationResult, ParseFailure, ParseResult, ParseSuccess, ParsedTLE, ParsedTLEWithNumbers, Parser, ParserContext, ParserMiddleware, ParserPlugin, ParserProfile, PartialBy, RequiredBy, RevolutionNumber, RightAscension, SatelliteNumber, SatelliteNumberValidationResult, StateMachineParseResult, StreamParserOptions, TLEArrayFields, TLEError, TLEFilter, TLEParseOptions, TLEProvider, TLEStringFields, TLEValidateOptions, TLEWarning, ValidationFailure, ValidationMode, ValidationOptions, ValidationReport, ValidationResult, ValidationRule, ValidationRuleResult, ValidationSuccess, Validator };
+export { Colors, DEFAULT_VALIDATION_RULES, DESIGNATOR_CONSTRAINTS, EPOCH_CONSTRAINTS, ERROR_CODES, ErrorSeverityEnum as ErrorSeverity, IncrementalParser, MiddlewareParser, ORBITAL_PARAMETER_RANGES, ParserState, QUALITY_SCORE_WEIGHTS, RecoveryAction, SATELLITE_NUMBER_RANGES, TLECache, TLEErrorCode, TLEFormatError, TLEParserStream, TLEStateMachineParser, TLEValidationError, ValidationRuleManager, applyFilter, calculateChecksum, calculateEpochAge, calculateQualityScore, checkClassificationWarnings, checkDragAndEphemerisWarnings, checkEpochWarnings, checkOrbitalParameterWarnings, convertEpochToDate, createCachedParser, createIncrementalParser, createMiddlewareParser, createTLEParserStream, createValidationRule, _default as default, detectAnomalies, formatAsCSV, formatAsHuman, formatAsJSON, formatAsXML, formatAsYAML, formatTLE, generateValidationReport, getErrorDescription, getProfileOptions, getProviderOptions, isCriticalError, isParseFailure, isParseSuccess, isParsedTLE, isTLEError, isTLEWarning, isValidClassification, isValidErrorCode, isValidationFailure, isValidationSuccess, isWarningCode, normalizeAssumedDecimalNotation, normalizeLineEndings, normalizeScientificNotation, parseBatch, parseBatchAsync, parseFromCompressed, parseFromFile, parseFromStream, parseFromURL, parseParallel, parseTLE, parseTLEAsync, parseTLELines, parseWithProfile, parseWithProvider, parseWithStateMachine, reconstructTLE, sanitizeAllFields, sanitizeField, splitTLEs, validateAllOrbitalParameters, validateChecksum, validateClassification, validateEpochAge, validateEpochDate, validateInternationalDesignator, validateLineStructure, validateNumericRange, validateOrbitalParameter, validateSatelliteNumber, validateTLE, validateTLEAsync };
+export type { AnomalyDetectionResult, ArgumentOfPerigee, BatchParseOptions, CSVOptions, CacheOptions, Checksum, ChecksumValidationResult, Classification, ClassificationType, ClassificationValidationResult, DataQualityScore, Eccentricity, ElementSetNumber, EphemerisType, EpochDate, EpochDay, EpochYear, ExtendedParsedTLE, FieldExtractor, FieldParser, FieldSanitizationResult, ITLEFormatError, ITLEValidationError, Inclination, InternationalDesignatorLaunchNumber, InternationalDesignatorYear, LegacyValidationResult, LineValidationResult, MeanAnomaly, MeanMotion, MiddlewareContext, MiddlewarePlugin, MultiSourceOptions, Mutable, NumericRangeValidationResult, OutputOptions, ParseFailure, ParseResult, ParseSuccess, ParsedTLE, ParsedTLEWithNumbers, Parser, ParserContext, ParserMiddleware, ParserPlugin, ParserProfile, PartialBy, RequiredBy, RevolutionNumber, RightAscension, SatelliteNumber, SatelliteNumberValidationResult, StateMachineParseResult, StreamParserOptions, TLEArrayFields, TLEError, TLEFilter, TLEParseOptions, TLEProvider, TLEReconstructionOptions, TLEStringFields, TLEValidateOptions, TLEWarning, ValidationFailure, ValidationMode, ValidationOptions, ValidationReport, ValidationResult, ValidationRule, ValidationRuleResult, ValidationSuccess, Validator };
