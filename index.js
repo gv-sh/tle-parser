@@ -970,6 +970,15 @@ function parseTLE(tleString, options = {}) {
     return tleObject;
 }
 
+// Import state machine parser
+const {
+    TLEStateMachineParser,
+    parseWithStateMachine,
+    ParserState,
+    ErrorSeverity,
+    RecoveryAction
+} = require('./stateMachineParser');
+
 module.exports = {
     parseTLE,
     validateTLE,
@@ -987,5 +996,11 @@ module.exports = {
     parseTLELines,
     TLEValidationError,
     TLEFormatError,
-    ERROR_CODES
+    ERROR_CODES,
+    // State machine parser exports
+    TLEStateMachineParser,
+    parseWithStateMachine,
+    ParserState,
+    ErrorSeverity,
+    RecoveryAction
 };
