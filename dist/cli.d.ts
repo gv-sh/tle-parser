@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * TLE Parser CLI
  * Command-line interface for parsing, validating, and converting TLE data
@@ -17,6 +16,8 @@ interface CLIOptions {
     recursive?: boolean;
     includeWarnings?: boolean;
     includeComments?: boolean;
+    repl?: boolean;
+    progress?: boolean;
     help?: boolean;
     version?: boolean;
 }

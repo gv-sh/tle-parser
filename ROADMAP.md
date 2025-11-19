@@ -151,13 +151,13 @@ TLE parsers serve critical functions across multiple domains:
 - [x] Implement file watching for continuous parsing
 - [x] Add output format selection via flags
 - [x] Support stdin/stdout piping for Unix workflows
-- [ ] Create interactive REPL mode
-- [ ] Add progress indicators for large files
+- [x] Create interactive REPL mode
+- [x] Add progress indicators for large files
 - [x] Implement filtering and search from CLI
 - [x] Add validation-only mode
 - [x] Create diff tool for comparing TLEs
 - [x] Support remote URL fetching
-- [ ] Add shell completion scripts
+- [x] Add shell completion scripts
 
 ## Week 5: Data Sources & Orbital Calculations
 

@@ -1,0 +1,55 @@
+#compdef tle-parser
+# Zsh completion script for tle-parser
+
+_tle_parser() {
+    local -a opts formats verbosity_levels
+
+    formats=(
+        'json:JSON format'
+        'csv:CSV format'
+        'xml:XML format'
+        'yaml:YAML format'
+        'human:Human-readable format'
+        'tle:TLE format'
+    )
+
+    verbosity_levels=(
+        'compact:Compact output'
+        'normal:Normal verbosity'
+        'verbose:Verbose output'
+    )
+
+    opts=(
+        '(-f --format)'{-f,--format}'[Output format]:format:->formats'
+        '(-p --pretty)'{-p,--pretty}'[Pretty-print output]'
+        '(-c --colors)'{-c,--colors}'[Enable colored output]'
+        '(-v --verbosity)'{-v,--verbosity}'[Verbosity level]:level:->verbosity'
+        '(-o --output)'{-o,--output}'[Output file]:file:_files'
+        '--validate-only[Only validate TLE]'
+        '--watch[Watch file for changes]'
+        '--filter[Filter satellites]:pattern:'
+        '--diff[Compare with another file]:file:_files -g "*.tle"'
+        '--url[Fetch from URL]'
+        '--recursive[Process directory recursively]'
+        '--repl[Start interactive REPL mode]'
+        '--progress[Show progress indicators]'
+        '--no-warnings[Exclude warnings]'
+        '--no-comments[Exclude comments]'
+        '(-h --help)'{-h,--help}'[Show help message]'
+        '--version[Show version]'
+        '*:file:_files -g "*.tle" -g "*.txt"'
+    )
+
+    _arguments -s -S $opts
+
+    case $state in
+        formats)
+            _describe -t formats 'output format' formats
+            ;;
+        verbosity)
+            _describe -t verbosity_levels 'verbosity level' verbosity_levels
+            ;;
+    esac
+}
+
+_tle_parser "$@"

@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 /**
  * TLE Parser CLI
  * Command-line interface for parsing, validating, and converting TLE data
@@ -8,7 +6,8 @@
 import { readFileSync, existsSync, watch } from 'fs';
 import { readdir } from 'fs/promises';
 import { join, extname } from 'path';
-import { stdin } from 'process';
+import { stdin, stdout } from 'process';
+import * as readline from 'readline';
 import { parseTLE, validateTLE, parseBatch } from './index';
 import { formatTLE } from './outputFormats';
 import type { OutputOptions } from './outputFormats';
@@ -19,6 +18,61 @@ import type { ParsedTLE } from './types';
  */
 function getSatelliteNumber(tle: ParsedTLE): string {
   return tle.satelliteNumber1 || tle.satelliteNumber2 || '';
+}
+
+/**
+ * Simple progress bar for terminal
+ */
+class ProgressBar {
+  private total: number;
+  private current: number;
+  private barLength: number;
+  private lastUpdate: number;
+
+  constructor(total: number, barLength: number = 40) {
+    this.total = total;
+    this.current = 0;
+    this.barLength = barLength;
+    this.lastUpdate = 0;
+  }
+
+  update(current: number): void {
+    this.current = current;
+    const now = Date.now();
+
+    // Throttle updates to every 100ms
+    if (now - this.lastUpdate < 100 && current < this.total) {
+      return;
+    }
+
+    this.lastUpdate = now;
+    this.render();
+  }
+
+  increment(): void {
+    this.update(this.current + 1);
+  }
+
+  private render(): void {
+    const percentage = Math.min(100, Math.floor((this.current / this.total) * 100));
+    const filled = Math.floor((this.current / this.total) * this.barLength);
+    const empty = this.barLength - filled;
+
+    const bar = '█'.repeat(filled) + '░'.repeat(empty);
+    const text = `Progress: [${bar}] ${percentage}% (${this.current}/${this.total})`;
+
+    // Clear line and write progress
+    stdout.write('\r' + text);
+
+    // Add newline when complete
+    if (this.current >= this.total) {
+      stdout.write('\n');
+    }
+  }
+
+  complete(): void {
+    this.update(this.total);
+  }
 }
 
 // ============================================================================
@@ -39,6 +93,8 @@ interface CLIOptions {
   recursive?: boolean;
   includeWarnings?: boolean;
   includeComments?: boolean;
+  repl?: boolean;
+  progress?: boolean;
   help?: boolean;
   version?: boolean;
 }
@@ -71,6 +127,8 @@ OPTIONS:
   --diff <file>             Compare with another TLE file and show differences
   --url                     Fetch TLE from URL instead of file
   --recursive               Process all TLE files in directory recursively
+  --repl                    Start interactive REPL mode
+  --progress                Show progress indicators for large files
   --no-warnings             Exclude warnings from output
   --no-comments             Exclude comments from output
   -h, --help                Show this help message
@@ -112,6 +170,12 @@ EXAMPLES:
 
   # Reconstruct TLE from parsed data
   tle-parser --format tle data/iss.tle
+
+  # Start interactive REPL mode
+  tle-parser --repl
+
+  # Show progress for large files
+  tle-parser --progress large-satellites.tle
 `;
 
   console.log(helpText);
@@ -142,6 +206,8 @@ function parseArgs(args: string[]): { options: CLIOptions; files: string[] } {
     watch: false,
     url: false,
     recursive: false,
+    repl: false,
+    progress: false,
     includeWarnings: true,
     includeComments: true
   };
@@ -204,6 +270,12 @@ function parseArgs(args: string[]): { options: CLIOptions; files: string[] } {
         break;
       case '--no-comments':
         options.includeComments = false;
+        break;
+      case '--repl':
+        options.repl = true;
+        break;
+      case '--progress':
+        options.progress = true;
         break;
       default:
         if (!arg.startsWith('-')) {
@@ -327,6 +399,176 @@ function diffTLEs(oldTles: ParsedTLE[], newTles: ParsedTLE[]): void {
 }
 
 /**
+ * Start interactive REPL mode
+ */
+async function startREPL(options: CLIOptions): Promise<void> {
+  const rl = readline.createInterface({
+    input: stdin,
+    output: stdout,
+    prompt: 'tle> '
+  });
+
+  console.log('TLE Parser REPL - Interactive Mode');
+  console.log('Type "help" for available commands, "exit" to quit\n');
+
+  let tleBuffer: string[] = [];
+  let mode: 'command' | 'input' = 'command';
+
+  rl.prompt();
+
+  rl.on('line', async (line: string) => {
+    const trimmed = line.trim();
+
+    // Handle input mode (multi-line TLE entry)
+    if (mode === 'input') {
+      if (trimmed === '.end') {
+        mode = 'command';
+        const tleText = tleBuffer.join('\n');
+        tleBuffer = [];
+
+        try {
+          const tles = parseBatch(tleText, { validate: true });
+          if (tles.length === 0) {
+            console.log('No TLE data found');
+          } else {
+            const outputOptions: OutputOptions = {
+              format: options.format || 'json',
+              pretty: options.pretty !== undefined ? options.pretty : true,
+              colors: options.colors !== undefined ? options.colors : true,
+              verbosity: options.verbosity || 'normal',
+              includeWarnings: options.includeWarnings,
+              includeComments: options.includeComments
+            };
+            const result: ParsedTLE | ParsedTLE[] = tles.length === 1 ? tles[0]! : tles;
+            console.log(formatTLE(result, outputOptions));
+          }
+        } catch (error) {
+          if (error instanceof Error) {
+            console.error(`Error: ${error.message}`);
+          }
+        }
+      } else {
+        tleBuffer.push(line);
+      }
+      rl.prompt();
+      return;
+    }
+
+    // Handle command mode
+    if (!trimmed) {
+      rl.prompt();
+      return;
+    }
+
+    const [cmd, ...args] = trimmed.split(/\s+/);
+
+    switch (cmd?.toLowerCase()) {
+      case 'help':
+        console.log(`
+Available commands:
+  help                  Show this help message
+  parse                 Enter TLE input mode (end with ".end" on new line)
+  validate <tle>        Validate a single-line TLE command
+  format <type>         Set output format: json, csv, xml, yaml, human, tle
+  pretty [on|off]       Toggle pretty-printing
+  colors [on|off]       Toggle colored output
+  clear                 Clear the screen
+  exit, quit            Exit REPL
+
+Examples:
+  > parse
+  ISS (ZARYA)
+  1 25544U 98067A   08264.51782528 -.00002182  00000-0 -11606-4 0  2927
+  2 25544  51.6416 247.4627 0006703 130.5360 325.0288 15.72125391563537
+  .end
+
+  > format human
+  > pretty on
+  > colors on
+`);
+        break;
+
+      case 'parse':
+        console.log('Enter TLE data (end with ".end" on a new line):');
+        mode = 'input';
+        break;
+
+      case 'validate':
+        if (args.length === 0) {
+          console.log('Usage: validate <tle-text>');
+        } else {
+          const tleText = args.join(' ');
+          const result = validateTLE(tleText);
+          if (result.isValid) {
+            console.log('✓ Valid TLE');
+          } else {
+            console.log('✗ Invalid TLE');
+            result.errors.forEach(e => {
+              const msg = typeof e === 'object' && 'message' in e ? e.message : String(e);
+              console.log(`  Error: ${msg}`);
+            });
+          }
+        }
+        break;
+
+      case 'format':
+        if (args.length === 0) {
+          console.log(`Current format: ${options.format}`);
+        } else {
+          const newFormat = args[0]?.toLowerCase();
+          if (['json', 'csv', 'xml', 'yaml', 'human', 'tle'].includes(newFormat || '')) {
+            options.format = newFormat as any;
+            console.log(`Format set to: ${newFormat}`);
+          } else {
+            console.log('Invalid format. Choose: json, csv, xml, yaml, human, tle');
+          }
+        }
+        break;
+
+      case 'pretty':
+        if (args.length === 0) {
+          options.pretty = !options.pretty;
+        } else {
+          options.pretty = args[0]?.toLowerCase() === 'on';
+        }
+        console.log(`Pretty-printing: ${options.pretty ? 'on' : 'off'}`);
+        break;
+
+      case 'colors':
+        if (args.length === 0) {
+          options.colors = !options.colors;
+        } else {
+          options.colors = args[0]?.toLowerCase() === 'on';
+        }
+        console.log(`Colors: ${options.colors ? 'on' : 'off'}`);
+        break;
+
+      case 'clear':
+        console.clear();
+        break;
+
+      case 'exit':
+      case 'quit':
+        console.log('Goodbye!');
+        rl.close();
+        return;
+
+      default:
+        console.log(`Unknown command: ${cmd}`);
+        console.log('Type "help" for available commands');
+        break;
+    }
+
+    rl.prompt();
+  });
+
+  rl.on('close', () => {
+    console.log('\nGoodbye!');
+    process.exit(0);
+  });
+}
+
+/**
  * Process TLE file
  */
 async function processFile(
@@ -364,11 +606,29 @@ async function processFile(
 
     // Parse TLE(s)
     let tles: ParsedTLE[];
+    let progressBar: ProgressBar | undefined;
+
     try {
+      // Count TLEs for progress indicator
+      const lines = data.split('\n').filter(l => l.trim());
+      const estimatedTLEs = Math.floor(lines.length / 3); // Rough estimate
+
+      if (options.progress && estimatedTLEs > 10) {
+        console.log(`Parsing ${estimatedTLEs} TLEs...`);
+        progressBar = new ProgressBar(estimatedTLEs);
+      }
+
       tles = parseBatch(data, { validate: true });
+
+      if (progressBar) {
+        progressBar.complete();
+      }
     } catch (error) {
       // If batch parsing fails, try single TLE
       tles = [parseTLE(data, { validate: true })];
+      if (progressBar) {
+        progressBar.complete();
+      }
     }
 
     // Apply filter if specified
@@ -506,6 +766,12 @@ async function main(): Promise<void> {
     return;
   }
 
+  // Handle REPL mode
+  if (options.repl) {
+    await startREPL(options);
+    return;
+  }
+
   // Handle diff mode
   if (options.diff) {
     if (files.length !== 1) {
@@ -552,12 +818,10 @@ async function main(): Promise<void> {
   await processFile(inputFile, options, options.url);
 }
 
-// Run CLI
-if (require.main === module) {
-  main().catch(error => {
-    console.error('Fatal error:', error);
-    process.exit(1);
-  });
-}
+// Run CLI when executed directly
+main().catch(error => {
+  console.error('Fatal error:', error);
+  process.exit(1);
+});
 
 export { main, parseArgs, printHelp, printVersion };
