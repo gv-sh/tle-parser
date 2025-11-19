@@ -3,3 +3,9 @@ coverage/
 *.log
 test-builds.cjs
 test-builds.mjs
+
+# GitHub Actions workflows (can't be pushed due to permissions)
+# See WORKFLOWS_README.md for instructions
+.github/workflows/ci.yml
+.github/workflows/publish.yml
+.github/workflows/size.yml
