@@ -7,7 +7,10 @@
 
 Object.defineProperty(exports, '__esModule', { value: true });
 
+var promises = require('fs/promises');
 var fs = require('fs');
+var path = require('path');
+var os = require('os');
 var util = require('util');
 var stream = require('stream');
 var zlib = require('zlib');
@@ -3729,6 +3732,1737 @@ function formatTLE(tle, options = {}) {
 }
 
 /**
+ * Rate Limiter for API Compliance
+ * Implements token bucket algorithm with per-source rate limits
+ */
+/**
+ * Rate limiter using token bucket algorithm
+ */
+class RateLimiter {
+    constructor(config) {
+        this.config = config;
+        this.queue = [];
+        this.processing = false;
+        this.tokens = config.maxRequests;
+        this.lastRefill = Date.now();
+    }
+    /**
+     * Refill tokens based on elapsed time
+     */
+    refillTokens() {
+        const now = Date.now();
+        const elapsed = now - this.lastRefill;
+        const tokensToAdd = (elapsed / this.config.intervalMs) * this.config.maxRequests;
+        if (tokensToAdd >= 1) {
+            this.tokens = Math.min(this.config.maxRequests, this.tokens + Math.floor(tokensToAdd));
+            this.lastRefill = now;
+        }
+    }
+    /**
+     * Process queued requests
+     */
+    async processQueue() {
+        if (this.processing)
+            return;
+        this.processing = true;
+        while (this.queue.length > 0) {
+            this.refillTokens();
+            if (this.tokens >= 1) {
+                const item = this.queue.shift();
+                if (item) {
+                    this.tokens -= 1;
+                    item.resolve();
+                }
+            }
+            else {
+                // Wait until next refill
+                const waitTime = this.config.intervalMs - (Date.now() - this.lastRefill);
+                if (waitTime > 0) {
+                    await new Promise(resolve => setTimeout(resolve, waitTime));
+                }
+            }
+        }
+        this.processing = false;
+    }
+    /**
+     * Acquire a token to make a request
+     * Returns a promise that resolves when a token is available
+     */
+    async acquire() {
+        this.refillTokens();
+        if (this.tokens >= 1) {
+            this.tokens -= 1;
+            return Promise.resolve();
+        }
+        // Check queue size limit
+        if (this.config.maxQueueSize && this.queue.length >= this.config.maxQueueSize) {
+            throw new Error('Rate limiter queue is full');
+        }
+        // Queue the request
+        return new Promise((resolve, reject) => {
+            this.queue.push({
+                resolve,
+                reject,
+                timestamp: Date.now()
+            });
+            this.processQueue();
+        });
+    }
+    /**
+     * Execute a function with rate limiting
+     */
+    async execute(fn) {
+        await this.acquire();
+        return fn();
+    }
+    /**
+     * Get current rate limiter status
+     */
+    getStatus() {
+        this.refillTokens();
+        return {
+            tokens: this.tokens,
+            queueLength: this.queue.length,
+            maxRequests: this.config.maxRequests,
+            intervalMs: this.config.intervalMs
+        };
+    }
+    /**
+     * Clear the queue
+     */
+    clearQueue() {
+        for (const item of this.queue) {
+            item.reject(new Error('Rate limiter queue cleared'));
+        }
+        this.queue = [];
+    }
+    /**
+     * Reset the rate limiter
+     */
+    reset() {
+        this.tokens = this.config.maxRequests;
+        this.lastRefill = Date.now();
+        this.clearQueue();
+    }
+}
+/**
+ * Multi-source rate limiter manager
+ */
+class RateLimiterManager {
+    constructor() {
+        this.limiters = new Map();
+    }
+    /**
+     * Register a rate limiter for a source
+     */
+    register(source, config) {
+        this.limiters.set(source, new RateLimiter(config));
+    }
+    /**
+     * Get rate limiter for a source
+     */
+    get(source) {
+        return this.limiters.get(source);
+    }
+    /**
+     * Acquire a token for a source
+     */
+    async acquire(source) {
+        const limiter = this.limiters.get(source);
+        if (!limiter) {
+            throw new Error(`No rate limiter registered for source: ${source}`);
+        }
+        return limiter.acquire();
+    }
+    /**
+     * Execute a function with rate limiting for a source
+     */
+    async execute(source, fn) {
+        const limiter = this.limiters.get(source);
+        if (!limiter) {
+            throw new Error(`No rate limiter registered for source: ${source}`);
+        }
+        return limiter.execute(fn);
+    }
+    /**
+     * Get status for all rate limiters
+     */
+    getAllStatus() {
+        const status = new Map();
+        for (const [source, limiter] of this.limiters) {
+            status.set(source, limiter.getStatus());
+        }
+        return status;
+    }
+    /**
+     * Reset all rate limiters
+     */
+    resetAll() {
+        for (const limiter of this.limiters.values()) {
+            limiter.reset();
+        }
+    }
+}
+
+/**
+ * Caching Layer with TTL Support
+ * Provides LRU cache with time-to-live and optional persistence
+ */
+/**
+ * LRU Cache with TTL support
+ */
+class TTLCache {
+    constructor(config = {}) {
+        this.cache = new Map();
+        this.accessOrder = [];
+        this.persistTimer = null;
+        this.maxSize = config.maxSize || 100;
+        this.defaultTTL = config.defaultTTL || 3600000; // 1 hour default
+        this.persistent = config.persistent || false;
+        this.cacheDir = config.cacheDir || path.join(os.homedir(), '.tle-parser', 'cache');
+        this.cacheFile = config.cacheFile || 'tle-cache.json';
+        if (this.persistent) {
+            this.loadFromDisk().catch(() => {
+                // Ignore errors on initial load
+            });
+            // Auto-save every 5 minutes
+            this.persistTimer = setInterval(() => {
+                this.saveToDisk().catch(() => {
+                    // Ignore persistence errors
+                });
+            }, 300000);
+        }
+    }
+    /**
+     * Get value from cache
+     */
+    get(key) {
+        const entry = this.cache.get(key);
+        if (!entry)
+            return undefined;
+        // Check if expired
+        if (Date.now() - entry.timestamp > entry.ttl) {
+            this.delete(key);
+            return undefined;
+        }
+        // Update access order (LRU)
+        this.updateAccessOrder(key);
+        return entry.value;
+    }
+    /**
+     * Set value in cache
+     */
+    set(key, value, ttl) {
+        const entry = {
+            value,
+            timestamp: Date.now(),
+            ttl: ttl || this.defaultTTL
+        };
+        // Evict oldest entry if cache is full
+        if (this.cache.size >= this.maxSize && !this.cache.has(key)) {
+            const oldestKey = this.accessOrder[0];
+            if (oldestKey) {
+                this.delete(oldestKey);
+            }
+        }
+        this.cache.set(key, entry);
+        this.updateAccessOrder(key);
+    }
+    /**
+     * Check if key exists and is not expired
+     */
+    has(key) {
+        return this.get(key) !== undefined;
+    }
+    /**
+     * Delete entry from cache
+     */
+    delete(key) {
+        this.accessOrder = this.accessOrder.filter(k => k !== key);
+        return this.cache.delete(key);
+    }
+    /**
+     * Clear all entries
+     */
+    clear() {
+        this.cache.clear();
+        this.accessOrder = [];
+    }
+    /**
+     * Get cache size
+     */
+    size() {
+        // Clean expired entries first
+        this.cleanExpired();
+        return this.cache.size;
+    }
+    /**
+     * Clean expired entries
+     */
+    cleanExpired() {
+        const now = Date.now();
+        let cleaned = 0;
+        for (const [key, entry] of this.cache.entries()) {
+            if (now - entry.timestamp > entry.ttl) {
+                this.delete(key);
+                cleaned++;
+            }
+        }
+        return cleaned;
+    }
+    /**
+     * Get all keys
+     */
+    keys() {
+        this.cleanExpired();
+        return Array.from(this.cache.keys());
+    }
+    /**
+     * Get cache statistics
+     */
+    getStats() {
+        const size = this.size();
+        const oldest = this.accessOrder[0] || null;
+        const newest = this.accessOrder[this.accessOrder.length - 1] || null;
+        return {
+            size,
+            maxSize: this.maxSize,
+            hitRate: 0, // Would need hit/miss tracking
+            oldestEntry: oldest,
+            newestEntry: newest
+        };
+    }
+    /**
+     * Update access order for LRU
+     */
+    updateAccessOrder(key) {
+        this.accessOrder = this.accessOrder.filter(k => k !== key);
+        this.accessOrder.push(key);
+    }
+    /**
+     * Save cache to disk
+     */
+    async saveToDisk() {
+        if (!this.persistent)
+            return;
+        try {
+            // Ensure cache directory exists
+            if (!fs.existsSync(this.cacheDir)) {
+                await promises.mkdir(this.cacheDir, { recursive: true });
+            }
+            const data = {
+                entries: Array.from(this.cache.entries()),
+                accessOrder: this.accessOrder,
+                timestamp: Date.now()
+            };
+            const cachePath = path.join(this.cacheDir, this.cacheFile);
+            await promises.writeFile(cachePath, JSON.stringify(data, null, 2), 'utf8');
+        }
+        catch (error) {
+            // Ignore persistence errors
+            console.error('Failed to save cache to disk:', error);
+        }
+    }
+    /**
+     * Load cache from disk
+     */
+    async loadFromDisk() {
+        if (!this.persistent)
+            return;
+        try {
+            const cachePath = path.join(this.cacheDir, this.cacheFile);
+            if (!fs.existsSync(cachePath)) {
+                return;
+            }
+            const content = await promises.readFile(cachePath, 'utf8');
+            const data = JSON.parse(content);
+            // Restore cache entries
+            this.cache.clear();
+            for (const [key, entry] of data.entries) {
+                this.cache.set(key, entry);
+            }
+            // Restore access order
+            this.accessOrder = data.accessOrder || [];
+            // Clean expired entries
+            this.cleanExpired();
+        }
+        catch (error) {
+            // Ignore load errors
+            console.error('Failed to load cache from disk:', error);
+        }
+    }
+    /**
+     * Destroy cache and cleanup
+     */
+    destroy() {
+        if (this.persistTimer) {
+            clearInterval(this.persistTimer);
+            this.persistTimer = null;
+        }
+        if (this.persistent) {
+            this.saveToDisk().catch(() => {
+                // Ignore persistence errors
+            });
+        }
+        this.clear();
+    }
+}
+/**
+ * Global cache instance for TLE data
+ */
+const tleCache = new TTLCache({
+    maxSize: 1000,
+    defaultTTL: 3600000, // 1 hour
+    persistent: true,
+    cacheFile: 'tle-data.json'
+});
+/**
+ * Cache key generator for TLE sources
+ */
+function generateCacheKey(source, params = {}) {
+    const sortedParams = Object.keys(params)
+        .sort()
+        .map(key => `${key}=${params[key]}`)
+        .join('&');
+    return sortedParams ? `${source}:${sortedParams}` : source;
+}
+
+/**
+ * TLE Data Sources Module
+ * Implements fetchers for CelesTrak, Space-Track.org, and other TLE data sources
+ * with authentication, caching, rate limiting, and failover support
+ */
+// ============================================================================
+// CELESTRAK DATA SOURCE
+// ============================================================================
+/**
+ * CelesTrak TLE data source
+ * Public API, no authentication required
+ * Documentation: https://celestrak.org/NORAD/documentation/
+ */
+class CelesTrakSource {
+    constructor(config = {}) {
+        this.baseUrl = 'https://celestrak.org/NORAD/elements/gp.php';
+        this.config = {
+            type: 'celestrak',
+            baseUrl: config.baseUrl || this.baseUrl,
+            enableCache: config.enableCache !== false,
+            cacheTTL: config.cacheTTL || 3600000, // 1 hour
+            timeout: config.timeout || 30000,
+            rateLimit: config.rateLimit || {
+                maxRequests: 20,
+                intervalMs: 60000 // 20 requests per minute
+            },
+            ...config
+        };
+        this.rateLimiter = new RateLimiter(this.config.rateLimit);
+        this.cache = new TTLCache({
+            maxSize: 100,
+            defaultTTL: this.config.cacheTTL,
+            persistent: true,
+            cacheFile: 'celestrak-cache.json'
+        });
+    }
+    /**
+     * Fetch TLE data from CelesTrak
+     */
+    async fetch(options = {}) {
+        const cacheKey = this.generateCacheKey(options);
+        const startTime = Date.now();
+        // Check cache first
+        if (this.config.enableCache && !options.forceRefresh) {
+            const cached = this.cache.get(cacheKey);
+            if (cached) {
+                const data = parseBatch(cached, options.parseOptions || {});
+                return {
+                    data,
+                    source: 'celestrak',
+                    timestamp: new Date(),
+                    cached: true,
+                    count: data.length,
+                    age: Date.now() - startTime
+                };
+            }
+        }
+        // Build URL with query parameters
+        const url = this.buildUrl(options);
+        // Fetch with rate limiting
+        const content = await this.rateLimiter.execute(async () => {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
+            try {
+                const response = await fetch(url, {
+                    headers: this.config.headers,
+                    signal: controller.signal
+                });
+                if (!response.ok) {
+                    throw new Error(`CelesTrak fetch failed: ${response.status} ${response.statusText}`);
+                }
+                return await response.text();
+            }
+            finally {
+                clearTimeout(timeoutId);
+            }
+        });
+        // Cache the result
+        if (this.config.enableCache) {
+            this.cache.set(cacheKey, content, this.config.cacheTTL);
+        }
+        // Parse the TLE data
+        const data = parseBatch(content, options.parseOptions || {});
+        return {
+            data,
+            source: 'celestrak',
+            timestamp: new Date(),
+            cached: false,
+            count: data.length,
+            age: Date.now() - startTime
+        };
+    }
+    /**
+     * Build URL with query parameters
+     */
+    buildUrl(options) {
+        const params = new URLSearchParams();
+        if (options.catalogNumber) {
+            const numbers = Array.isArray(options.catalogNumber)
+                ? options.catalogNumber
+                : [options.catalogNumber];
+            params.append('CATNR', numbers.join(','));
+            params.append('FORMAT', 'TLE');
+        }
+        else if (options.group) {
+            params.append('GROUP', options.group);
+            params.append('FORMAT', 'TLE');
+        }
+        else if (options.namePattern) {
+            params.append('NAME', options.namePattern);
+            params.append('FORMAT', 'TLE');
+        }
+        else if (options.intlDesignator) {
+            params.append('INTDES', options.intlDesignator);
+            params.append('FORMAT', 'TLE');
+        }
+        else {
+            // Default to active satellites
+            params.append('GROUP', 'active');
+            params.append('FORMAT', 'TLE');
+        }
+        // Add custom query parameters
+        if (options.queryParams) {
+            for (const [key, value] of Object.entries(options.queryParams)) {
+                params.append(key, value);
+            }
+        }
+        return `${this.config.baseUrl}?${params.toString()}`;
+    }
+    /**
+     * Generate cache key
+     */
+    generateCacheKey(options) {
+        return generateCacheKey('celestrak', {
+            catalog: options.catalogNumber,
+            group: options.group,
+            name: options.namePattern,
+            intl: options.intlDesignator
+        });
+    }
+    /**
+     * Clear cache
+     */
+    clearCache() {
+        this.cache.clear();
+    }
+    /**
+     * Get cache statistics
+     */
+    getCacheStats() {
+        return this.cache.getStats();
+    }
+}
+// ============================================================================
+// SPACE-TRACK.ORG DATA SOURCE
+// ============================================================================
+/**
+ * Space-Track.org TLE data source
+ * Requires authentication
+ * Documentation: https://www.space-track.org/documentation
+ */
+class SpaceTrackSource {
+    constructor(config = {}) {
+        this.baseUrl = 'https://www.space-track.org';
+        this.authUrl = 'https://www.space-track.org/ajaxauth/login';
+        this.queryUrl = 'https://www.space-track.org/basicspacedata/query';
+        this.sessionCookie = null;
+        this.lastAuth = 0;
+        this.authTTL = 7200000; // 2 hours
+        if (!config.credentials?.username || !config.credentials?.password) {
+            throw new Error('Space-Track.org requires username and password credentials');
+        }
+        this.config = {
+            type: 'spacetrack',
+            baseUrl: config.baseUrl || this.baseUrl,
+            credentials: config.credentials,
+            enableCache: config.enableCache !== false,
+            cacheTTL: config.cacheTTL || 1800000, // 30 minutes
+            timeout: config.timeout || 60000,
+            rateLimit: config.rateLimit || {
+                maxRequests: 20,
+                intervalMs: 60000 // 20 requests per minute
+            },
+            ...config
+        };
+        this.rateLimiter = new RateLimiter(this.config.rateLimit);
+        this.cache = new TTLCache({
+            maxSize: 100,
+            defaultTTL: this.config.cacheTTL,
+            persistent: true,
+            cacheFile: 'spacetrack-cache.json'
+        });
+    }
+    /**
+     * Authenticate with Space-Track.org
+     */
+    async authenticate() {
+        // Check if we have a valid session
+        if (this.sessionCookie &&
+            Date.now() - this.lastAuth < this.authTTL) {
+            return;
+        }
+        const formData = new URLSearchParams();
+        formData.append('identity', this.config.credentials.username);
+        formData.append('password', this.config.credentials.password);
+        const response = await fetch(this.authUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: formData.toString()
+        });
+        if (!response.ok) {
+            throw new Error(`Space-Track authentication failed: ${response.status} ${response.statusText}`);
+        }
+        // Extract session cookie
+        const cookies = response.headers.get('set-cookie');
+        if (cookies) {
+            const match = cookies.match(/chocolatechip=([^;]+)/);
+            if (match && match[1]) {
+                this.sessionCookie = match[1];
+                this.lastAuth = Date.now();
+            }
+        }
+        if (!this.sessionCookie) {
+            throw new Error('Failed to obtain Space-Track session cookie');
+        }
+    }
+    /**
+     * Fetch TLE data from Space-Track.org
+     */
+    async fetch(options = {}) {
+        const cacheKey = this.generateCacheKey(options);
+        const startTime = Date.now();
+        // Check cache first
+        if (this.config.enableCache && !options.forceRefresh) {
+            const cached = this.cache.get(cacheKey);
+            if (cached) {
+                const data = parseBatch(cached, options.parseOptions || {});
+                return {
+                    data,
+                    source: 'spacetrack',
+                    timestamp: new Date(),
+                    cached: true,
+                    count: data.length,
+                    age: Date.now() - startTime
+                };
+            }
+        }
+        // Authenticate first
+        await this.authenticate();
+        // Build query URL
+        const url = this.buildUrl(options);
+        // Fetch with rate limiting
+        const content = await this.rateLimiter.execute(async () => {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
+            try {
+                const response = await fetch(url, {
+                    headers: {
+                        Cookie: `chocolatechip=${this.sessionCookie}`,
+                        ...this.config.headers
+                    },
+                    signal: controller.signal
+                });
+                if (!response.ok) {
+                    // Try re-authenticating once
+                    if (response.status === 401) {
+                        this.sessionCookie = null;
+                        await this.authenticate();
+                        const retryResponse = await fetch(url, {
+                            headers: {
+                                Cookie: `chocolatechip=${this.sessionCookie}`,
+                                ...this.config.headers
+                            },
+                            signal: controller.signal
+                        });
+                        if (!retryResponse.ok) {
+                            throw new Error(`Space-Track fetch failed: ${retryResponse.status} ${retryResponse.statusText}`);
+                        }
+                        return await retryResponse.text();
+                    }
+                    throw new Error(`Space-Track fetch failed: ${response.status} ${response.statusText}`);
+                }
+                const text = await response.text();
+                // Space-Track returns JSON, convert to TLE format
+                try {
+                    const json = JSON.parse(text);
+                    return this.jsonToTLE(json);
+                }
+                catch {
+                    // If not JSON, assume it's already TLE format
+                    return text;
+                }
+            }
+            finally {
+                clearTimeout(timeoutId);
+            }
+        });
+        // Cache the result
+        if (this.config.enableCache) {
+            this.cache.set(cacheKey, content, this.config.cacheTTL);
+        }
+        // Parse the TLE data
+        const data = parseBatch(content, options.parseOptions || {});
+        return {
+            data,
+            source: 'spacetrack',
+            timestamp: new Date(),
+            cached: false,
+            count: data.length,
+            age: Date.now() - startTime
+        };
+    }
+    /**
+     * Build query URL
+     */
+    buildUrl(options) {
+        let query = '/class/gp/';
+        if (options.catalogNumber) {
+            const numbers = Array.isArray(options.catalogNumber)
+                ? options.catalogNumber
+                : [options.catalogNumber];
+            query += `NORAD_CAT_ID/${numbers.join(',')}/`;
+        }
+        if (options.intlDesignator) {
+            query += `INTLDES/${options.intlDesignator}/`;
+        }
+        // Order by epoch descending and limit to latest
+        query += 'orderby/EPOCH%20desc/limit/1000/format/tle';
+        return `${this.queryUrl}${query}`;
+    }
+    /**
+     * Convert Space-Track JSON to TLE format
+     */
+    jsonToTLE(json) {
+        if (!Array.isArray(json))
+            return '';
+        return json
+            .map(item => {
+            const lines = [];
+            // Add name if available
+            if (item.OBJECT_NAME) {
+                lines.push(item.OBJECT_NAME);
+            }
+            // Add TLE lines
+            if (item.TLE_LINE1)
+                lines.push(item.TLE_LINE1);
+            if (item.TLE_LINE2)
+                lines.push(item.TLE_LINE2);
+            return lines.join('\n');
+        })
+            .join('\n');
+    }
+    /**
+     * Generate cache key
+     */
+    generateCacheKey(options) {
+        return generateCacheKey('spacetrack', {
+            catalog: options.catalogNumber,
+            intl: options.intlDesignator
+        });
+    }
+    /**
+     * Clear cache
+     */
+    clearCache() {
+        this.cache.clear();
+    }
+    /**
+     * Get cache statistics
+     */
+    getCacheStats() {
+        return this.cache.getStats();
+    }
+    /**
+     * Logout and clear session
+     */
+    logout() {
+        this.sessionCookie = null;
+        this.lastAuth = 0;
+    }
+}
+// ============================================================================
+// AMSAT DATA SOURCE
+// ============================================================================
+/**
+ * AMSAT amateur radio satellite data source
+ * Public API, no authentication required
+ */
+class AMSATSource {
+    constructor(config = {}) {
+        this.baseUrl = 'https://www.amsat.org/tle/current/nasabare.txt';
+        this.config = {
+            type: 'amsat',
+            baseUrl: config.baseUrl || this.baseUrl,
+            enableCache: config.enableCache !== false,
+            cacheTTL: config.cacheTTL || 3600000, // 1 hour
+            timeout: config.timeout || 30000,
+            rateLimit: config.rateLimit || {
+                maxRequests: 10,
+                intervalMs: 60000 // 10 requests per minute
+            },
+            ...config
+        };
+        this.rateLimiter = new RateLimiter(this.config.rateLimit);
+        this.cache = new TTLCache({
+            maxSize: 10,
+            defaultTTL: this.config.cacheTTL,
+            persistent: true,
+            cacheFile: 'amsat-cache.json'
+        });
+    }
+    /**
+     * Fetch TLE data from AMSAT
+     */
+    async fetch(options = {}) {
+        const cacheKey = 'amsat:all';
+        const startTime = Date.now();
+        // Check cache first
+        if (this.config.enableCache && !options.forceRefresh) {
+            const cached = this.cache.get(cacheKey);
+            if (cached) {
+                const data = parseBatch(cached, options.parseOptions || {});
+                return {
+                    data,
+                    source: 'amsat',
+                    timestamp: new Date(),
+                    cached: true,
+                    count: data.length,
+                    age: Date.now() - startTime
+                };
+            }
+        }
+        // Fetch with rate limiting
+        const content = await this.rateLimiter.execute(async () => {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
+            try {
+                const response = await fetch(this.config.baseUrl, {
+                    headers: this.config.headers,
+                    signal: controller.signal
+                });
+                if (!response.ok) {
+                    throw new Error(`AMSAT fetch failed: ${response.status} ${response.statusText}`);
+                }
+                return await response.text();
+            }
+            finally {
+                clearTimeout(timeoutId);
+            }
+        });
+        // Cache the result
+        if (this.config.enableCache) {
+            this.cache.set(cacheKey, content, this.config.cacheTTL);
+        }
+        // Parse the TLE data
+        const data = parseBatch(content, options.parseOptions || {});
+        return {
+            data,
+            source: 'amsat',
+            timestamp: new Date(),
+            cached: false,
+            count: data.length,
+            age: Date.now() - startTime
+        };
+    }
+    /**
+     * Clear cache
+     */
+    clearCache() {
+        this.cache.clear();
+    }
+    /**
+     * Get cache statistics
+     */
+    getCacheStats() {
+        return this.cache.getStats();
+    }
+}
+// ============================================================================
+// CUSTOM DATA SOURCE
+// ============================================================================
+/**
+ * Custom TLE data source
+ * For user-defined URLs
+ */
+class CustomSource {
+    constructor(config) {
+        if (!config.baseUrl) {
+            throw new Error('Custom source requires a base URL');
+        }
+        this.config = {
+            ...config,
+            type: 'custom',
+            enableCache: config.enableCache !== false,
+            cacheTTL: config.cacheTTL || 3600000,
+            timeout: config.timeout || 30000,
+            rateLimit: config.rateLimit || {
+                maxRequests: 10,
+                intervalMs: 60000
+            }
+        };
+        this.rateLimiter = new RateLimiter(this.config.rateLimit);
+        this.cache = new TTLCache({
+            maxSize: 50,
+            defaultTTL: this.config.cacheTTL,
+            persistent: true,
+            cacheFile: 'custom-cache.json'
+        });
+    }
+    /**
+     * Fetch TLE data from custom source
+     */
+    async fetch(options = {}) {
+        const url = options.queryParams?.url || this.config.baseUrl;
+        const cacheKey = generateCacheKey('custom', { url });
+        const startTime = Date.now();
+        // Check cache first
+        if (this.config.enableCache && !options.forceRefresh) {
+            const cached = this.cache.get(cacheKey);
+            if (cached) {
+                const data = parseBatch(cached, options.parseOptions || {});
+                return {
+                    data,
+                    source: 'custom',
+                    timestamp: new Date(),
+                    cached: true,
+                    count: data.length,
+                    age: Date.now() - startTime
+                };
+            }
+        }
+        // Fetch with rate limiting
+        const content = await this.rateLimiter.execute(async () => {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
+            try {
+                const headers = {
+                    ...this.config.headers
+                };
+                if (this.config.credentials?.apiKey) {
+                    headers['Authorization'] = `Bearer ${this.config.credentials.apiKey}`;
+                }
+                const response = await fetch(url, {
+                    headers,
+                    signal: controller.signal
+                });
+                if (!response.ok) {
+                    throw new Error(`Custom source fetch failed: ${response.status} ${response.statusText}`);
+                }
+                return await response.text();
+            }
+            finally {
+                clearTimeout(timeoutId);
+            }
+        });
+        // Cache the result
+        if (this.config.enableCache) {
+            this.cache.set(cacheKey, content, this.config.cacheTTL);
+        }
+        // Parse the TLE data
+        const data = parseBatch(content, options.parseOptions || {});
+        return {
+            data,
+            source: 'custom',
+            timestamp: new Date(),
+            cached: false,
+            count: data.length,
+            age: Date.now() - startTime
+        };
+    }
+    /**
+     * Clear cache
+     */
+    clearCache() {
+        this.cache.clear();
+    }
+    /**
+     * Get cache statistics
+     */
+    getCacheStats() {
+        return this.cache.getStats();
+    }
+}
+// ============================================================================
+// DATA SOURCE MANAGER WITH FAILOVER
+// ============================================================================
+/**
+ * Data source manager with failover support
+ */
+class DataSourceManager {
+    constructor() {
+        this.sources = new Map();
+        this.primarySource = null;
+        this.failoverOrder = [];
+    }
+    /**
+     * Register a data source
+     */
+    register(name, source, options = {}) {
+        this.sources.set(name, source);
+        if (options.primary) {
+            this.primarySource = name;
+        }
+        if (options.failover !== false) {
+            this.failoverOrder.push(name);
+        }
+    }
+    /**
+     * Fetch TLE data with failover
+     */
+    async fetch(sourceName, options = {}) {
+        // Determine which source to use
+        const targetSource = sourceName || this.primarySource;
+        if (!targetSource) {
+            throw new Error('No data source specified and no primary source configured');
+        }
+        const sourceOrder = [targetSource, ...this.failoverOrder.filter(s => s !== targetSource)];
+        let lastError = null;
+        // Try each source in order
+        for (const name of sourceOrder) {
+            const source = this.sources.get(name);
+            if (!source)
+                continue;
+            try {
+                return await source.fetch(options);
+            }
+            catch (error) {
+                lastError = error;
+                console.error(`Failed to fetch from ${name}:`, error);
+                // Continue to next source
+            }
+        }
+        throw new Error(`All data sources failed. Last error: ${lastError?.message || 'Unknown error'}`);
+    }
+    /**
+     * Get a specific source
+     */
+    getSource(name) {
+        return this.sources.get(name);
+    }
+    /**
+     * List all registered sources
+     */
+    listSources() {
+        return Array.from(this.sources.keys());
+    }
+    /**
+     * Clear all caches
+     */
+    clearAllCaches() {
+        for (const source of this.sources.values()) {
+            source.clearCache();
+        }
+    }
+}
+/**
+ * Check if TLE data is fresh
+ */
+function validateFreshness(tle, maxAgeMs = 259200000 // 3 days default
+) {
+    // Parse epoch from TLE
+    const epochYear = parseInt(tle.epochYear, 10);
+    const epochDay = parseFloat(tle.epoch);
+    // Convert two-digit year to full year
+    const fullYear = epochYear < 57 ? 2000 + epochYear : 1900 + epochYear;
+    // Calculate epoch date
+    const epochDate = new Date(fullYear, 0, 1);
+    epochDate.setDate(epochDay);
+    const age = Date.now() - epochDate.getTime();
+    const isFresh = age <= maxAgeMs;
+    const ageInDays = Math.floor(age / 86400000);
+    const message = isFresh
+        ? `TLE is fresh (${ageInDays} days old)`
+        : `TLE is stale (${ageInDays} days old)`;
+    return {
+        isFresh,
+        age,
+        epochDate,
+        message
+    };
+}
+/**
+ * Filter TLEs by freshness
+ */
+function filterByFreshness(tles, maxAgeMs = 259200000) {
+    return tles.filter(tle => {
+        const validation = validateFreshness(tle, maxAgeMs);
+        return validation.isFresh;
+    });
+}
+
+/**
+ * Constellation Definitions and Filters
+ * Provides pre-defined satellite constellation groups and filtering
+ */
+/**
+ * Pre-defined constellations
+ */
+const CONSTELLATIONS = {
+    // Starlink
+    starlink: {
+        name: 'Starlink',
+        description: 'SpaceX Starlink satellite constellation',
+        namePatterns: [
+            /^STARLINK-/i,
+            /^STARLINK /i
+        ],
+        intlDesignatorPatterns: [
+            /^\d{2}-(0[0-9]{2}|1[0-9]{2})[A-Z]{1,3}$/
+        ]
+    },
+    // OneWeb
+    oneweb: {
+        name: 'OneWeb',
+        description: 'OneWeb satellite constellation',
+        namePatterns: [
+            /^ONEWEB-/i,
+            /^ONEWEB /i
+        ]
+    },
+    // GPS
+    gps: {
+        name: 'GPS',
+        description: 'Global Positioning System satellites',
+        namePatterns: [
+            /^GPS /i,
+            /^NAVSTAR/i,
+            /^USA-/i // Many GPS satellites
+        ],
+        catalogNumbers: [
+            [20959, 20959], // GPS BIIA-1
+            [22014, 22014], // GPS BIIA-2
+            [22877, 22877], // GPS BIIA-3
+            [23833, 23833], // GPS BIIA-4
+            [24876, 24876], // GPS BIIA-5
+            [25933, 25933], // GPS BIIA-6
+            [26360, 26360], // GPS BIIA-7
+            [26407, 26407], // GPS BIIA-8
+            [26605, 26605], // GPS BIIA-9
+            [26690, 26690], // GPS BIIA-10
+            // GPS IIR
+            [28361, 28361], // GPS BIIR-2
+            [28474, 28474], // GPS BIIR-3
+            [28874, 28874], // GPS BIIR-4
+            [29486, 29486], // GPS BIIR-5
+            [29601, 29601], // GPS BIIR-6
+            [32260, 32260], // GPS BIIR-7
+            [32384, 32384], // GPS BIIR-8
+            [32711, 32711], // GPS BIIR-9
+            [35752, 35752], // GPS BIIR-10
+            [36585, 36585], // GPS BIIR-11
+            [37753, 37753], // GPS BIIR-12
+            [38833, 38833], // GPS BIIR-13
+            [39166, 39166], // GPS BIIR-14
+            [40105, 40105], // GPS BIIR-15
+            [40294, 40294], // GPS BIIR-16
+            [40534, 40534], // GPS BIIR-17
+            [40730, 40730], // GPS BIIR-18
+            [41019, 41019], // GPS BIIR-19
+            [41328, 41328], // GPS BIIR-20
+            // GPS IIF and III ranges
+            [36500, 36600],
+            [40000, 41400]
+        ]
+    },
+    // Galileo
+    galileo: {
+        name: 'Galileo',
+        description: 'European GNSS constellation',
+        namePatterns: [
+            /^GALILEO/i,
+            /^GSAT/i
+        ],
+        catalogNumbers: [
+            [37846, 37846], // GSAT0101
+            [37847, 37847], // GSAT0102
+            [38857, 38857], // GSAT0103
+            [38858, 38858], // GSAT0104
+            [40128, 40128], // GSAT0201
+            [40129, 40129], // GSAT0202
+            [40544, 40544], // GSAT0203
+            [40545, 40545], // GSAT0204
+            [40889, 40889], // GSAT0205
+            [40890, 40890], // GSAT0206
+            [41174, 41174], // GSAT0207
+            [41175, 41175], // GSAT0208
+            [41549, 41549], // GSAT0209
+            [41550, 41550], // GSAT0210
+            [41859, 41859], // GSAT0211
+            [41860, 41860], // GSAT0212
+            [41861, 41861], // GSAT0213
+            [41862, 41862], // GSAT0214
+            [43055, 43055], // GSAT0215
+            [43056, 43056], // GSAT0216
+            [43057, 43057], // GSAT0217
+            [43058, 43058], // GSAT0218
+            [43564, 43564], // GSAT0219
+            [43565, 43565], // GSAT0220
+            [43566, 43566], // GSAT0221
+            [43567, 43567] // GSAT0222
+        ]
+    },
+    // GLONASS
+    glonass: {
+        name: 'GLONASS',
+        description: 'Russian GNSS constellation',
+        namePatterns: [
+            /^COSMOS \d+$/i,
+            /^GLONASS/i
+        ],
+        catalogNumbers: [
+            // GLONASS-M
+            [28915, 28915], // Cosmos 2424
+            [32275, 32275], // Cosmos 2425
+            [32276, 32276], // Cosmos 2426
+            [32393, 32393], // Cosmos 2427
+            [32395, 32395], // Cosmos 2428
+            [36111, 36111], // Cosmos 2429
+            [36112, 36112], // Cosmos 2430
+            [36113, 36113], // Cosmos 2431
+            [36400, 36400], // Cosmos 2432
+            [36401, 36401], // Cosmos 2433
+            [36402, 36402], // Cosmos 2434
+            [37139, 37139], // Cosmos 2435
+            [37140, 37140], // Cosmos 2436
+            [37141, 37141], // Cosmos 2437
+            [37829, 37829], // Cosmos 2438
+            [37869, 37869], // Cosmos 2439
+            [37870, 37870], // Cosmos 2440
+            [39155, 39155], // Cosmos 2441
+            [39620, 39620], // Cosmos 2442
+            [39621, 39621], // Cosmos 2443
+            [39622, 39622], // Cosmos 2444
+            [40001, 40001], // Cosmos 2445
+            [40315, 40315], // Cosmos 2446
+            [40315, 40315], // Cosmos 2447
+            [41330, 41330], // Cosmos 2448
+            [41554, 41554], // Cosmos 2449
+            [41555, 41555], // Cosmos 2450
+            // GLONASS-K
+            [36400, 36410],
+            [37800, 37900],
+            [39100, 39700],
+            [40000, 41600]
+        ]
+    },
+    // BeiDou
+    beidou: {
+        name: 'BeiDou',
+        description: 'Chinese GNSS constellation',
+        namePatterns: [
+            /^BEIDOU/i,
+            /^BDS/i,
+            /^COMPASS/i
+        ],
+        catalogNumbers: [
+            [36287, 36287], // BeiDou-3 M1
+            [36828, 36828], // BeiDou-3 M2
+            [37210, 37210], // BeiDou-3 M3
+            [37384, 37384], // BeiDou-3 M4
+            [37763, 37763], // BeiDou-3 M5
+            [37948, 37948], // BeiDou-3 M6
+            [38091, 38091], // BeiDou-3 M7
+            [38250, 38250], // BeiDou-3 M8
+            [38251, 38251], // BeiDou-3 M9
+            [38775, 38775], // BeiDou-3 M10
+            [40549, 40549], // BeiDou-3 M11
+            [40748, 40748], // BeiDou-3 M12
+            [40749, 40749], // BeiDou-3 M13
+            [40938, 40938], // BeiDou-3 M14
+            [41434, 41434], // BeiDou-3 M15
+            [41586, 41586], // BeiDou-3 M16
+            [43001, 43001], // BeiDou-3 M17
+            [43002, 43002], // BeiDou-3 M18
+            [43107, 43107], // BeiDou-3 M19
+            [43108, 43108], // BeiDou-3 M20
+            [43207, 43207], // BeiDou-3 M21
+            [43208, 43208], // BeiDou-3 M22
+            [43245, 43245], // BeiDou-3 M23
+            [43246, 43246], // BeiDou-3 M24
+            // BeiDou-3 range
+            [36200, 43300]
+        ]
+    },
+    // ISS
+    iss: {
+        name: 'ISS',
+        description: 'International Space Station',
+        catalogNumbers: [25544],
+        namePatterns: [/^ISS/i]
+    },
+    // Amateur Radio
+    amateur: {
+        name: 'Amateur Radio',
+        description: 'Amateur radio satellites',
+        namePatterns: [
+            /^AO-/i, // AMSAT Oscar
+            /^SO-/i, // Surrey Oscar
+            /^FO-/i, // Fuji Oscar
+            /^FUNCUBE/i, // FUNcube
+            /^LILACSAT/i, // LilacSat
+            /^DIWATA/i, // Diwata
+            /^OSCAR/i, // Oscar
+            /^AMSAT/i, // AMSAT
+            /^CUBESAT/i, // CubeSat
+            /^RS-/i, // Radio Sputnik
+            /^ZARYA/i // Zarya
+        ]
+    },
+    // Weather satellites
+    weather: {
+        name: 'Weather',
+        description: 'Weather and meteorological satellites',
+        namePatterns: [
+            /^NOAA /i,
+            /^GOES /i,
+            /^METEOSAT/i,
+            /^METEOR/i,
+            /^FENGYUN/i,
+            /^FY-/i,
+            /^HIMAWARI/i
+        ]
+    },
+    // Iridium
+    iridium: {
+        name: 'Iridium',
+        description: 'Iridium satellite constellation',
+        namePatterns: [
+            /^IRIDIUM/i
+        ],
+        catalogNumbers: [
+            // Iridium NEXT
+            [41917, 41927], // First 10
+            [41934, 41944], // Next 10
+            [42803, 42813], // Next 10
+            [42955, 42965], // Next 10
+            [43070, 43080], // Next 10
+            [43249, 43259], // Next 10
+            [43478, 43488], // Next 10
+            [43569, 43579] // Last batch
+        ]
+    },
+    // Planet Labs
+    planet: {
+        name: 'Planet Labs',
+        description: 'Planet Labs Earth imaging satellites',
+        namePatterns: [
+            /^DOVE/i,
+            /^FLOCK/i,
+            /^PLANET/i,
+            /^SKYSAT/i
+        ]
+    },
+    // Spire
+    spire: {
+        name: 'Spire',
+        description: 'Spire Global satellite constellation',
+        namePatterns: [
+            /^LEMUR/i,
+            /^SPIRE/i
+        ]
+    }
+};
+/**
+ * Get constellation by name
+ */
+function getConstellation(name) {
+    return CONSTELLATIONS[name.toLowerCase()];
+}
+/**
+ * List all available constellations
+ */
+function listConstellations() {
+    return Object.keys(CONSTELLATIONS);
+}
+/**
+ * Create a TLE filter for a constellation
+ */
+function createConstellationFilter(constellationName) {
+    const constellation = getConstellation(constellationName);
+    if (!constellation)
+        return undefined;
+    const filter = {};
+    // Add satellite number filter
+    if (constellation.catalogNumbers && constellation.catalogNumbers.length > 0) {
+        filter.satelliteNumber = (satNum) => {
+            const num = parseInt(satNum, 10);
+            if (isNaN(num))
+                return false;
+            return constellation.catalogNumbers.some(range => {
+                if (Array.isArray(range)) {
+                    return num >= range[0] && num <= range[1];
+                }
+                return num === range;
+            });
+        };
+    }
+    // Add name pattern filter
+    if (constellation.namePatterns && constellation.namePatterns.length > 0) {
+        const originalNameFilter = filter.satelliteName;
+        filter.satelliteName = (name) => {
+            const matchesPattern = constellation.namePatterns.some(pattern => pattern.test(name));
+            if (originalNameFilter && typeof originalNameFilter === 'function') {
+                return matchesPattern && originalNameFilter(name);
+            }
+            return matchesPattern;
+        };
+    }
+    // Add custom filter
+    if (constellation.customFilter) {
+        const originalCustomFilter = filter.custom;
+        filter.custom = (tle) => {
+            const matchesCustom = constellation.customFilter(tle);
+            if (originalCustomFilter) {
+                return matchesCustom && originalCustomFilter(tle);
+            }
+            return matchesCustom;
+        };
+    }
+    return filter;
+}
+/**
+ * Check if a TLE matches a constellation
+ */
+function matchesConstellation(tle, constellationName) {
+    const constellation = getConstellation(constellationName);
+    if (!constellation)
+        return false;
+    // Check catalog numbers
+    if (constellation.catalogNumbers && constellation.catalogNumbers.length > 0) {
+        const satNum = parseInt(tle.satelliteNumber1, 10);
+        if (!isNaN(satNum)) {
+            const matchesCatalog = constellation.catalogNumbers.some(range => {
+                if (Array.isArray(range)) {
+                    return satNum >= range[0] && satNum <= range[1];
+                }
+                return satNum === range;
+            });
+            if (matchesCatalog)
+                return true;
+        }
+    }
+    // Check name patterns
+    if (constellation.namePatterns && tle.satelliteName) {
+        const matchesName = constellation.namePatterns.some(pattern => pattern.test(tle.satelliteName));
+        if (matchesName)
+            return true;
+    }
+    // Check custom filter
+    if (constellation.customFilter) {
+        return constellation.customFilter(tle);
+    }
+    return false;
+}
+/**
+ * Filter TLEs by constellation
+ */
+function filterByConstellation(tles, constellationName) {
+    return tles.filter(tle => matchesConstellation(tle, constellationName));
+}
+/**
+ * Group TLEs by constellation
+ */
+function groupByConstellation(tles) {
+    const groups = new Map();
+    for (const tle of tles) {
+        let matched = false;
+        for (const [name] of Object.entries(CONSTELLATIONS)) {
+            if (matchesConstellation(tle, name)) {
+                if (!groups.has(name)) {
+                    groups.set(name, []);
+                }
+                groups.get(name).push(tle);
+                matched = true;
+                break; // Each TLE belongs to only one constellation
+            }
+        }
+        if (!matched) {
+            if (!groups.has('unknown')) {
+                groups.set('unknown', []);
+            }
+            groups.get('unknown').push(tle);
+        }
+    }
+    return groups;
+}
+
+/**
+ * Automatic Update Scheduler
+ * Provides cron-like scheduling for automatic TLE data updates
+ */
+/**
+ * TLE Update Scheduler
+ */
+class TLEScheduler {
+    constructor(manager, config) {
+        this.manager = manager;
+        this.config = config;
+        this.timer = null;
+        this.isRunning = false;
+        this.lastUpdate = null;
+        this.updateCount = 0;
+        this.errorCount = 0;
+        this.lastError = null;
+        this.retryCount = 0;
+        if (config.autoStart) {
+            this.start();
+        }
+    }
+    /**
+     * Start the scheduler
+     */
+    start() {
+        if (this.isRunning) {
+            return;
+        }
+        this.isRunning = true;
+        this.scheduleNext();
+    }
+    /**
+     * Stop the scheduler
+     */
+    stop() {
+        if (this.timer) {
+            clearTimeout(this.timer);
+            this.timer = null;
+        }
+        this.isRunning = false;
+    }
+    /**
+     * Schedule the next update
+     */
+    scheduleNext() {
+        if (!this.isRunning)
+            return;
+        this.timer = setTimeout(() => {
+            this.executeUpdate();
+        }, this.config.intervalMs);
+    }
+    /**
+     * Execute an update
+     */
+    async executeUpdate() {
+        try {
+            const result = await this.manager.fetch(this.config.source || null, this.config.fetchOptions || {});
+            this.lastUpdate = new Date();
+            this.updateCount++;
+            this.retryCount = 0;
+            this.lastError = null;
+            if (this.config.onUpdate) {
+                this.config.onUpdate(result);
+            }
+            // Schedule next update
+            this.scheduleNext();
+        }
+        catch (error) {
+            this.errorCount++;
+            this.lastError = error;
+            if (this.config.onError) {
+                this.config.onError(this.lastError);
+            }
+            // Retry logic
+            const maxRetries = this.config.maxRetries || 3;
+            if (this.retryCount < maxRetries) {
+                this.retryCount++;
+                const retryDelay = this.config.retryDelayMs || 60000;
+                this.timer = setTimeout(() => {
+                    this.executeUpdate();
+                }, retryDelay);
+            }
+            else {
+                // Max retries reached, schedule next regular update
+                this.retryCount = 0;
+                this.scheduleNext();
+            }
+        }
+    }
+    /**
+     * Trigger immediate update
+     */
+    async updateNow() {
+        return this.manager.fetch(this.config.source || null, this.config.fetchOptions || {});
+    }
+    /**
+     * Get scheduler status
+     */
+    getStatus() {
+        return {
+            isRunning: this.isRunning,
+            lastUpdate: this.lastUpdate,
+            nextUpdate: this.timer
+                ? new Date(Date.now() + this.config.intervalMs)
+                : null,
+            updateCount: this.updateCount,
+            errorCount: this.errorCount,
+            lastError: this.lastError
+        };
+    }
+    /**
+     * Update schedule configuration
+     */
+    updateConfig(config) {
+        Object.assign(this.config, config);
+        // Restart if running
+        if (this.isRunning) {
+            this.stop();
+            this.start();
+        }
+    }
+    /**
+     * Reset statistics
+     */
+    resetStats() {
+        this.updateCount = 0;
+        this.errorCount = 0;
+        this.lastError = null;
+        this.retryCount = 0;
+    }
+}
+/**
+ * Scheduler manager for multiple schedules
+ */
+class SchedulerManager {
+    constructor() {
+        this.schedulers = new Map();
+    }
+    /**
+     * Create and register a scheduler
+     */
+    create(name, manager, config) {
+        const scheduler = new TLEScheduler(manager, config);
+        this.schedulers.set(name, scheduler);
+        return scheduler;
+    }
+    /**
+     * Get a scheduler by name
+     */
+    get(name) {
+        return this.schedulers.get(name);
+    }
+    /**
+     * Remove a scheduler
+     */
+    remove(name) {
+        const scheduler = this.schedulers.get(name);
+        if (scheduler) {
+            scheduler.stop();
+            return this.schedulers.delete(name);
+        }
+        return false;
+    }
+    /**
+     * Start all schedulers
+     */
+    startAll() {
+        for (const scheduler of this.schedulers.values()) {
+            scheduler.start();
+        }
+    }
+    /**
+     * Stop all schedulers
+     */
+    stopAll() {
+        for (const scheduler of this.schedulers.values()) {
+            scheduler.stop();
+        }
+    }
+    /**
+     * Get status for all schedulers
+     */
+    getAllStatus() {
+        const status = new Map();
+        for (const [name, scheduler] of this.schedulers) {
+            status.set(name, scheduler.getStatus());
+        }
+        return status;
+    }
+    /**
+     * List all scheduler names
+     */
+    list() {
+        return Array.from(this.schedulers.keys());
+    }
+}
+/**
+ * Common schedule intervals
+ */
+const SCHEDULE_INTERVALS = {
+    /** Every 15 minutes */
+    EVERY_15_MINUTES: 15 * 60 * 1000,
+    /** Every 30 minutes */
+    EVERY_30_MINUTES: 30 * 60 * 1000,
+    /** Every hour */
+    HOURLY: 60 * 60 * 1000,
+    /** Every 2 hours */
+    EVERY_2_HOURS: 2 * 60 * 60 * 1000,
+    /** Every 6 hours */
+    EVERY_6_HOURS: 6 * 60 * 60 * 1000,
+    /** Every 12 hours */
+    EVERY_12_HOURS: 12 * 60 * 60 * 1000,
+    /** Daily */
+    DAILY: 24 * 60 * 60 * 1000,
+    /** Weekly */
+    WEEKLY: 7 * 24 * 60 * 60 * 1000
+};
+/**
+ * Parse human-readable interval string
+ */
+function parseInterval(interval) {
+    const match = interval.match(/^(\d+)\s*(ms|s|m|h|d|w)$/i);
+    if (!match || !match[1] || !match[2]) {
+        throw new Error(`Invalid interval format: ${interval}`);
+    }
+    const value = parseInt(match[1], 10);
+    const unit = match[2].toLowerCase();
+    switch (unit) {
+        case 'ms':
+            return value;
+        case 's':
+            return value * 1000;
+        case 'm':
+            return value * 60 * 1000;
+        case 'h':
+            return value * 60 * 60 * 1000;
+        case 'd':
+            return value * 24 * 60 * 60 * 1000;
+        case 'w':
+            return value * 7 * 24 * 60 * 60 * 1000;
+        default:
+            throw new Error(`Unknown interval unit: ${unit}`);
+    }
+}
+
+/**
  * TLE Parser - Main Module
  * Comprehensive parser for Two-Line Element (TLE) satellite data
  * with full TypeScript support and strict type safety
@@ -4572,20 +6306,32 @@ var index = {
     ERROR_CODES: exports.ERROR_CODES
 };
 
+exports.AMSATSource = AMSATSource;
+exports.CONSTELLATIONS = CONSTELLATIONS;
+exports.CelesTrakSource = CelesTrakSource;
 exports.Colors = Colors;
+exports.CustomSource = CustomSource;
 exports.DEFAULT_VALIDATION_RULES = DEFAULT_VALIDATION_RULES;
 exports.DESIGNATOR_CONSTRAINTS = DESIGNATOR_CONSTRAINTS;
+exports.DataSourceManager = DataSourceManager;
 exports.EPOCH_CONSTRAINTS = EPOCH_CONSTRAINTS;
 exports.IncrementalParser = IncrementalParser;
 exports.MiddlewareParser = MiddlewareParser;
 exports.ORBITAL_PARAMETER_RANGES = ORBITAL_PARAMETER_RANGES;
 exports.QUALITY_SCORE_WEIGHTS = QUALITY_SCORE_WEIGHTS;
+exports.RateLimiter = RateLimiter;
+exports.RateLimiterManager = RateLimiterManager;
 exports.SATELLITE_NUMBER_RANGES = SATELLITE_NUMBER_RANGES;
+exports.SCHEDULE_INTERVALS = SCHEDULE_INTERVALS;
+exports.SchedulerManager = SchedulerManager;
+exports.SpaceTrackSource = SpaceTrackSource;
 exports.TLECache = TLECache;
 exports.TLEFormatError = TLEFormatError;
 exports.TLEParserStream = TLEParserStream;
+exports.TLEScheduler = TLEScheduler;
 exports.TLEStateMachineParser = TLEStateMachineParser;
 exports.TLEValidationError = TLEValidationError;
+exports.TTLCache = TTLCache;
 exports.ValidationRuleManager = ValidationRuleManager;
 exports.applyFilter = applyFilter;
 exports.calculateChecksum = calculateChecksum;
@@ -4597,22 +6343,28 @@ exports.checkEpochWarnings = checkEpochWarnings;
 exports.checkOrbitalParameterWarnings = checkOrbitalParameterWarnings;
 exports.convertEpochToDate = convertEpochToDate;
 exports.createCachedParser = createCachedParser;
+exports.createConstellationFilter = createConstellationFilter;
 exports.createIncrementalParser = createIncrementalParser;
 exports.createMiddlewareParser = createMiddlewareParser;
 exports.createTLEParserStream = createTLEParserStream;
 exports.createValidationRule = createValidationRule;
 exports.default = index;
 exports.detectAnomalies = detectAnomalies;
+exports.filterByConstellation = filterByConstellation;
+exports.filterByFreshness = filterByFreshness;
 exports.formatAsCSV = formatAsCSV;
 exports.formatAsHuman = formatAsHuman;
 exports.formatAsJSON = formatAsJSON;
 exports.formatAsXML = formatAsXML;
 exports.formatAsYAML = formatAsYAML;
 exports.formatTLE = formatTLE;
+exports.generateCacheKey = generateCacheKey;
 exports.generateValidationReport = generateValidationReport;
+exports.getConstellation = getConstellation;
 exports.getErrorDescription = getErrorDescription;
 exports.getProfileOptions = getProfileOptions;
 exports.getProviderOptions = getProviderOptions;
+exports.groupByConstellation = groupByConstellation;
 exports.isCriticalError = isCriticalError;
 exports.isParseFailure = isParseFailure;
 exports.isParseSuccess = isParseSuccess;
@@ -4624,6 +6376,8 @@ exports.isValidErrorCode = isValidErrorCode;
 exports.isValidationFailure = isValidationFailure;
 exports.isValidationSuccess = isValidationSuccess;
 exports.isWarningCode = isWarningCode;
+exports.listConstellations = listConstellations;
+exports.matchesConstellation = matchesConstellation;
 exports.normalizeAssumedDecimalNotation = normalizeAssumedDecimalNotation;
 exports.normalizeLineEndings = normalizeLineEndings;
 exports.normalizeScientificNotation = normalizeScientificNotation;
@@ -4633,6 +6387,7 @@ exports.parseFromCompressed = parseFromCompressed;
 exports.parseFromFile = parseFromFile;
 exports.parseFromStream = parseFromStream;
 exports.parseFromURL = parseFromURL;
+exports.parseInterval = parseInterval;
 exports.parseParallel = parseParallel;
 exports.parseTLE = parseTLE;
 exports.parseTLEAsync = parseTLEAsync;
@@ -4644,11 +6399,13 @@ exports.reconstructTLE = reconstructTLE;
 exports.sanitizeAllFields = sanitizeAllFields;
 exports.sanitizeField = sanitizeField;
 exports.splitTLEs = splitTLEs;
+exports.tleCache = tleCache;
 exports.validateAllOrbitalParameters = validateAllOrbitalParameters;
 exports.validateChecksum = validateChecksum;
 exports.validateClassification = validateClassification;
 exports.validateEpochAge = validateEpochAge;
 exports.validateEpochDate = validateEpochDate;
+exports.validateFreshness = validateFreshness;
 exports.validateInternationalDesignator = validateInternationalDesignator;
 exports.validateLineStructure = validateLineStructure;
 exports.validateNumericRange = validateNumericRange;

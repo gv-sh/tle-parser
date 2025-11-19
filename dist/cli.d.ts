@@ -20,6 +20,19 @@ interface CLIOptions {
     progress?: boolean;
     help?: boolean;
     version?: boolean;
+    fetch?: boolean;
+    source?: 'celestrak' | 'spacetrack' | 'amsat' | 'custom';
+    constellation?: string;
+    catalog?: string;
+    group?: string;
+    listConstellations?: boolean;
+    listSources?: boolean;
+    fresh?: number;
+    noCache?: boolean;
+    clearCache?: boolean;
+    schedule?: string;
+    spacetrackUser?: string;
+    spacetrackPass?: string;
 }
 /**
  * Print help message

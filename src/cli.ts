@@ -12,6 +12,14 @@ import { parseTLE, validateTLE, parseBatch } from './index';
 import { formatTLE } from './outputFormats';
 import type { OutputOptions } from './outputFormats';
 import type { ParsedTLE } from './types';
+import {
+  CelesTrakSource,
+  SpaceTrackSource,
+  AMSATSource,
+  DataSourceManager,
+  validateFreshness
+} from './dataSources';
+import { listConstellations, createConstellationFilter, filterByConstellation } from './constellations';
 
 /**
  * Helper to get satellite number from ParsedTLE
@@ -97,6 +105,20 @@ interface CLIOptions {
   progress?: boolean;
   help?: boolean;
   version?: boolean;
+  // Week 5: Data Acquisition options
+  fetch?: boolean;
+  source?: 'celestrak' | 'spacetrack' | 'amsat' | 'custom';
+  constellation?: string;
+  catalog?: string;
+  group?: string;
+  listConstellations?: boolean;
+  listSources?: boolean;
+  fresh?: number; // Max age in days
+  noCache?: boolean;
+  clearCache?: boolean;
+  schedule?: string;
+  spacetrackUser?: string;
+  spacetrackPass?: string;
 }
 
 // ============================================================================
@@ -133,6 +155,20 @@ OPTIONS:
   --no-comments             Exclude comments from output
   -h, --help                Show this help message
   --version                 Show version number
+
+DATA ACQUISITION OPTIONS (Week 5):
+  --fetch                   Fetch TLE data from online sources
+  --source <name>           Data source: celestrak, spacetrack, amsat, custom (default: celestrak)
+  --constellation <name>    Filter by constellation (e.g., starlink, oneweb, gps)
+  --catalog <numbers>       Fetch by satellite catalog number(s) (comma-separated)
+  --group <name>            CelesTrak group (e.g., stations, visual, active)
+  --list-constellations     List all available constellations
+  --list-sources            List all available data sources
+  --fresh <days>            Filter TLEs older than N days
+  --no-cache                Bypass cache and fetch fresh data
+  --clear-cache             Clear all cached TLE data
+  --spacetrack-user <user>  Space-Track.org username
+  --spacetrack-pass <pass>  Space-Track.org password
 
 EXAMPLES:
   # Parse TLE file to JSON
@@ -176,6 +212,31 @@ EXAMPLES:
 
   # Show progress for large files
   tle-parser --progress large-satellites.tle
+
+DATA ACQUISITION EXAMPLES:
+  # Fetch Starlink satellites from CelesTrak
+  tle-parser --fetch --constellation starlink
+
+  # Fetch ISS TLE from CelesTrak
+  tle-parser --fetch --catalog 25544
+
+  # Fetch active satellites from CelesTrak
+  tle-parser --fetch --group active
+
+  # Fetch from AMSAT amateur radio database
+  tle-parser --fetch --source amsat
+
+  # Fetch from Space-Track.org (requires credentials)
+  tle-parser --fetch --source spacetrack --catalog 25544 --spacetrack-user user --spacetrack-pass pass
+
+  # List all available constellations
+  tle-parser --list-constellations
+
+  # Fetch and filter by freshness (last 3 days)
+  tle-parser --fetch --constellation starlink --fresh 3
+
+  # Clear cache and fetch fresh data
+  tle-parser --fetch --clear-cache --constellation gps
 `;
 
   console.log(helpText);
@@ -276,6 +337,43 @@ function parseArgs(args: string[]): { options: CLIOptions; files: string[] } {
         break;
       case '--progress':
         options.progress = true;
+        break;
+      // Week 5: Data Acquisition options
+      case '--fetch':
+        options.fetch = true;
+        break;
+      case '--source':
+        options.source = (args[++i] || 'celestrak') as any;
+        break;
+      case '--constellation':
+        options.constellation = args[++i] || '';
+        break;
+      case '--catalog':
+        options.catalog = args[++i] || '';
+        break;
+      case '--group':
+        options.group = args[++i] || '';
+        break;
+      case '--list-constellations':
+        options.listConstellations = true;
+        break;
+      case '--list-sources':
+        options.listSources = true;
+        break;
+      case '--fresh':
+        options.fresh = parseInt(args[++i] || '0', 10);
+        break;
+      case '--no-cache':
+        options.noCache = true;
+        break;
+      case '--clear-cache':
+        options.clearCache = true;
+        break;
+      case '--spacetrack-user':
+        options.spacetrackUser = args[++i] || '';
+        break;
+      case '--spacetrack-pass':
+        options.spacetrackPass = args[++i] || '';
         break;
       default:
         if (!arg.startsWith('-')) {
@@ -745,6 +843,100 @@ async function compareFiles(file1?: string, file2?: string): Promise<void> {
   }
 }
 
+/**
+ * Fetch TLE data from online sources (Week 5)
+ */
+async function fetchTLEData(options: CLIOptions): Promise<ParsedTLE[]> {
+  // Determine source
+  const sourceName = options.source || 'celestrak';
+
+  // Create source manager
+  const manager = new DataSourceManager();
+
+  // Register sources
+  const celestrak = new CelesTrakSource({
+    enableCache: !options.noCache
+  });
+  manager.register('celestrak', celestrak, { primary: true, failover: true });
+
+  const amsat = new AMSATSource({
+    enableCache: !options.noCache
+  });
+  manager.register('amsat', amsat, { failover: true });
+
+  // Register Space-Track if credentials provided
+  if (options.spacetrackUser && options.spacetrackPass) {
+    const spacetrack = new SpaceTrackSource({
+      credentials: {
+        username: options.spacetrackUser,
+        password: options.spacetrackPass
+      },
+      enableCache: !options.noCache
+    });
+    manager.register('spacetrack', spacetrack, { failover: true });
+  }
+
+  // Clear cache if requested
+  if (options.clearCache) {
+    manager.clearAllCaches();
+    console.log('Cache cleared');
+  }
+
+  // Build fetch options
+  const fetchOptions: any = {
+    forceRefresh: options.noCache
+  };
+
+  if (options.catalog) {
+    const numbers = options.catalog.split(',').map(n => parseInt(n.trim(), 10));
+    fetchOptions.catalogNumber = numbers.length === 1 ? numbers[0] : numbers;
+  }
+
+  if (options.group) {
+    fetchOptions.group = options.group;
+  }
+
+  if (options.constellation) {
+    // Create constellation filter
+    const constellationFilter = createConstellationFilter(options.constellation);
+    if (!constellationFilter) {
+      console.error(`Error: Unknown constellation: ${options.constellation}`);
+      console.error(`Use --list-constellations to see available constellations`);
+      process.exit(1);
+    }
+    fetchOptions.parseOptions = {
+      filter: constellationFilter
+    };
+  }
+
+  // Fetch data
+  console.log(`Fetching TLE data from ${sourceName}...`);
+  const result = await manager.fetch(sourceName, fetchOptions);
+
+  console.log(`Fetched ${result.count} TLEs from ${result.source} (${result.cached ? 'cached' : 'fresh'})`);
+
+  let data = result.data;
+
+  // Apply constellation filter if not already applied
+  if (options.constellation && !fetchOptions.parseOptions) {
+    data = filterByConstellation(data, options.constellation);
+    console.log(`Filtered to ${data.length} TLEs for constellation: ${options.constellation}`);
+  }
+
+  // Apply freshness filter
+  if (options.fresh && options.fresh > 0) {
+    const maxAgeMs = options.fresh * 24 * 60 * 60 * 1000; // Convert days to ms
+    const freshData = data.filter(tle => {
+      const validation = validateFreshness(tle, maxAgeMs);
+      return validation.isFresh;
+    });
+    console.log(`Filtered to ${freshData.length} fresh TLEs (last ${options.fresh} days)`);
+    data = freshData;
+  }
+
+  return data;
+}
+
 // ============================================================================
 // MAIN
 // ============================================================================
@@ -763,6 +955,51 @@ async function main(): Promise<void> {
 
   if (options.version) {
     printVersion();
+    return;
+  }
+
+  // Handle list constellations (Week 5)
+  if (options.listConstellations) {
+    const constellations = listConstellations();
+    console.log('Available constellations:');
+    for (const name of constellations) {
+      console.log(`  - ${name}`);
+    }
+    return;
+  }
+
+  // Handle list sources (Week 5)
+  if (options.listSources) {
+    console.log('Available data sources:');
+    console.log('  - celestrak    : CelesTrak (public, no auth)');
+    console.log('  - spacetrack   : Space-Track.org (requires auth)');
+    console.log('  - amsat        : AMSAT amateur radio satellites');
+    console.log('  - custom       : Custom URL source');
+    return;
+  }
+
+  // Handle fetch mode (Week 5)
+  if (options.fetch) {
+    const tles = await fetchTLEData(options);
+
+    // Format and output
+    const outputOptions: OutputOptions = {
+      format: options.format || 'json',
+      pretty: options.pretty,
+      colors: options.colors,
+      verbosity: options.verbosity
+    };
+
+    const output = formatTLE(tles, outputOptions);
+
+    if (options.output) {
+      const { writeFile } = await import('fs/promises');
+      await writeFile(options.output, output, 'utf-8');
+      console.log(`Output written to: ${options.output}`);
+    } else {
+      console.log(output);
+    }
+
     return;
   }
 

@@ -162,18 +162,18 @@ TLE parsers serve critical functions across multiple domains:
 ## Week 5: Data Sources & Orbital Calculations
 
 ### TLE Data Acquisition
-- [ ] Implement fetcher for CelesTrak TLE data
-- [ ] Add Space-Track.org API integration (with authentication)
-- [ ] Support fetching by satellite catalog number
-- [ ] Add filtering by constellation (Starlink, OneWeb, etc.)
-- [ ] Implement caching with TTL for fetched data
-- [ ] Add support for amateur radio satellite databases
-- [ ] Create automatic update scheduling
-- [ ] Implement rate limiting for API compliance
-- [ ] Add offline mode with cached data
-- [ ] Support custom TLE source configuration
-- [ ] Implement failover between multiple sources
-- [ ] Add TLE freshness validation
+- [x] Implement fetcher for CelesTrak TLE data
+- [x] Add Space-Track.org API integration (with authentication)
+- [x] Support fetching by satellite catalog number
+- [x] Add filtering by constellation (Starlink, OneWeb, etc.)
+- [x] Implement caching with TTL for fetched data
+- [x] Add support for amateur radio satellite databases
+- [x] Create automatic update scheduling
+- [x] Implement rate limiting for API compliance
+- [x] Add offline mode with cached data
+- [x] Support custom TLE source configuration
+- [x] Implement failover between multiple sources
+- [x] Add TLE freshness validation
 
 ### Orbital Calculations
 - [ ] Integrate SGP4/SDP4 propagator for position calculation

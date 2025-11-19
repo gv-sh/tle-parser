@@ -60,6 +60,12 @@ __exportStar(require("./advancedParser"), exports);
 __exportStar(require("./validation"), exports);
 // Re-export output formatters
 __exportStar(require("./outputFormats"), exports);
+// Re-export data acquisition features (Week 5)
+__exportStar(require("./dataSources"), exports);
+__exportStar(require("./cache"), exports);
+__exportStar(require("./rateLimiter"), exports);
+__exportStar(require("./constellations"), exports);
+__exportStar(require("./scheduler"), exports);
 // Load the TLE configuration from imported JSON
 const tleConfig = tleConfig_json_1.default;
 // ============================================================================
