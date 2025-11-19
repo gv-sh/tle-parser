@@ -49,8 +49,8 @@ TLE parsers serve critical functions across multiple domains:
 ### Testing Infrastructure Expansion
 - [x] Add integration tests for end-to-end scenarios
 - [x] Implement property-based testing for parser robustness
-- [ ] Create performance benchmarks for parsing speed
-- [ ] Add regression tests for bug fixes
+- [x] Create performance benchmarks for parsing speed
+- [x] Add regression tests for bug fixes
 - [ ] Test against historical TLE data for format variations
 - [ ] Validate parser output against reference implementations
 - [ ] Add code coverage reporting (target 95%+)
