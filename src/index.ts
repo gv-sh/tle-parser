@@ -43,6 +43,13 @@ export * from './validation';
 // Re-export output formatters
 export * from './outputFormats';
 
+// Re-export data acquisition features (Week 5)
+export * from './dataSources';
+export * from './cache';
+export * from './rateLimiter';
+export * from './constellations';
+export * from './scheduler';
+
 // ============================================================================
 // TLE CONFIGURATION LOADING
 // ============================================================================
