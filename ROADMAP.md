@@ -87,17 +87,17 @@ TLE parsers serve critical functions across multiple domains:
 - [x] Add performance optimization guidelines
 
 ### Modern Build Pipeline
-- [ ] Set up modern build pipeline (esbuild, rollup, or vite)
-- [ ] Generate CommonJS, ESM, and UMD bundles
-- [ ] Optimize bundle size with tree-shaking
-- [ ] Add source maps for debugging
-- [ ] Set up automated npm publishing workflow
-- [ ] Create minified production builds
-- [ ] Add bundle size monitoring and limits
-- [ ] Generate separate builds for Node.js and browser
-- [ ] Implement code splitting for optional features
+- [x] Set up modern build pipeline (esbuild, rollup, or vite)
+- [x] Generate CommonJS, ESM, and UMD bundles
+- [x] Optimize bundle size with tree-shaking
+- [x] Add source maps for debugging
+- [x] Set up automated npm publishing workflow
+- [x] Create minified production builds
+- [x] Add bundle size monitoring and limits
+- [x] Generate separate builds for Node.js and browser
+- [x] Implement code splitting for optional features
 - [ ] Set up CDN distribution via jsDelivr or unpkg
-- [ ] Create lightweight core package with optional plugins
+- [x] Create lightweight core package with optional plugins
 
 ## Week 3: Enhanced Parsing & Validation
 
