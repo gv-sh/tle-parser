@@ -4,6 +4,7 @@ A robust parser for TLE (Two-Line Element) satellite data with comprehensive inp
 
 ## Features
 
+### Core Features
 - Parse TLE data with or without satellite name (2 or 3 line format)
 - Support for metadata comments (lines starting with `#`)
 - Automatic line ending normalization (CRLF, LF, CR)
@@ -17,17 +18,32 @@ A robust parser for TLE (Two-Line Element) satellite data with comprehensive inp
 - **State machine parser with error recovery** - Continue parsing even with malformed data
 - Partial result extraction from corrupted TLE data
 - Detailed error and warning tracking
-- **Robust edge case handling:**
-  - Cross-platform line ending support (CRLF, LF, CR, and mixed)
-  - Automatic whitespace normalization (leading/trailing/multiple empty lines)
-  - Tab character handling and conversion
-  - Unicode character support in satellite names
-- **Modern build system:**
-  - Multiple bundle formats (ESM, CommonJS, UMD, Browser)
-  - Tree-shaking support for optimal bundle sizes
-  - Source maps for debugging
-  - Minified production builds
-  - TypeScript definitions included
+
+### Advanced Features ⚡
+- **Batch parsing** - Parse multiple TLEs from single input
+- **Async/await support** - Non-blocking operations
+- **Streaming parser** - Handle large TLE files efficiently
+- **Multi-source parsing** - Parse from files, URLs, streams, and compressed archives
+- **Incremental parsing** - Real-time data feed support
+- **Filtering** - Filter by satellite number, name, epoch, inclination, etc.
+- **Middleware/Plugin system** - Extend parser functionality
+- **Caching layer** - LRU cache for frequently parsed TLEs
+- **Parser profiles** - Presets for different use cases (strict, fast, realtime, etc.)
+- **Parallel parsing** - Multi-core support for large datasets
+- **Provider support** - Optimized for CelesTrak, Space-Track, AMSAT, etc.
+
+### Robust Edge Case Handling
+- Cross-platform line ending support (CRLF, LF, CR, and mixed)
+- Automatic whitespace normalization (leading/trailing/multiple empty lines)
+- Tab character handling and conversion
+- Unicode character support in satellite names
+
+### Modern Build System
+- Multiple bundle formats (ESM, CommonJS, UMD, Browser)
+- Tree-shaking support for optimal bundle sizes
+- Source maps for debugging
+- Minified production builds
+- TypeScript definitions included
 
 ## Package Formats
 
@@ -47,6 +63,7 @@ Comprehensive documentation is available in the [docs](docs/) directory:
 - **[Complete Documentation Index](docs/README.md)** - Start here for all documentation
 - **[API Reference](docs/api/API_REFERENCE.md)** - Complete function documentation
 - **[Usage Examples](docs/guides/USAGE_EXAMPLES.md)** - Practical code examples
+- **[Advanced Features](docs/advanced-features.md)** - ⚡ Batch, streaming, filtering, caching, and more
 - **[FAQ](docs/FAQ.md)** - Frequently asked questions
 
 ### Understanding TLEs

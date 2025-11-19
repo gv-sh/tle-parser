@@ -54,6 +54,8 @@ Object.defineProperty(exports, "parseWithStateMachine", { enumerable: true, get:
 Object.defineProperty(exports, "ParserState", { enumerable: true, get: function () { return stateMachineParser_1.ParserState; } });
 Object.defineProperty(exports, "RecoveryAction", { enumerable: true, get: function () { return stateMachineParser_1.RecoveryAction; } });
 Object.defineProperty(exports, "ErrorSeverity", { enumerable: true, get: function () { return stateMachineParser_1.ErrorSeverityEnum; } });
+// Re-export advanced parser features
+__exportStar(require("./advancedParser"), exports);
 // Load the TLE configuration from imported JSON
 const tleConfig = tleConfig_json_1.default;
 // ============================================================================
@@ -75,7 +77,9 @@ class TLEValidationError extends Error {
         this.name = 'TLEValidationError';
         this.errors = errors;
         this.warnings = warnings;
-        Error.captureStackTrace(this, this.constructor);
+        if (typeof Error.captureStackTrace === 'function') {
+            Error.captureStackTrace(this, this.constructor);
+        }
     }
 }
 exports.TLEValidationError = TLEValidationError;
@@ -95,7 +99,9 @@ class TLEFormatError extends Error {
         this.name = 'TLEFormatError';
         this.code = code;
         this.details = details;
-        Error.captureStackTrace(this, this.constructor);
+        if (typeof Error.captureStackTrace === 'function') {
+            Error.captureStackTrace(this, this.constructor);
+        }
     }
 }
 exports.TLEFormatError = TLEFormatError;
