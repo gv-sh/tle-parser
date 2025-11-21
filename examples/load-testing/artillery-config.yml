@@ -1,0 +1,105 @@
+config:
+  target: "http://localhost:3000"
+  phases:
+    - duration: 60
+      arrivalRate: 5
+      name: "Warm up"
+    - duration: 120
+      arrivalRate: 20
+      name: "Ramp up load"
+    - duration: 300
+      arrivalRate: 50
+      name: "Sustained load"
+    - duration: 60
+      arrivalRate: 5
+      name: "Cool down"
+  processor: "./processor.js"
+  variables:
+    apiKey: "test-key"
+  http:
+    timeout: 10000
+    pool: 50
+  plugins:
+    expect: {}
+    metrics-by-endpoint: {}
+
+scenarios:
+  - name: "Parse single TLE"
+    weight: 40
+    flow:
+      - post:
+          url: "/v1/parse"
+          headers:
+            Content-Type: "application/json"
+            X-API-Key: "{{ apiKey }}"
+          json:
+            tle: "ISS (ZARYA)\n1 25544U 98067A   24325.50000000  .00016717  00000-0  10270-3 0  9005\n2 25544  51.6400 220.1003 0008380  87.5100  53.2300 15.50030060123456"
+            strict: true
+          capture:
+            - json: "$.name"
+              as: "satelliteName"
+          expect:
+            - statusCode: 200
+            - hasProperty: "catalogNumber"
+      - think: 1
+
+  - name: "Parse batch TLEs"
+    weight: 20
+    flow:
+      - post:
+          url: "/v1/parse/batch"
+          headers:
+            Content-Type: "application/json"
+            X-API-Key: "{{ apiKey }}"
+          json:
+            tles:
+              - "ISS (ZARYA)\n1 25544U 98067A   24325.50000000  .00016717  00000-0  10270-3 0  9005\n2 25544  51.6400 220.1003 0008380  87.5100  53.2300 15.50030060123456"
+              - "ISS (ZARYA)\n1 25544U 98067A   24325.50000000  .00016717  00000-0  10270-3 0  9005\n2 25544  51.6400 220.1003 0008380  87.5100  53.2300 15.50030060123456"
+            strict: true
+          expect:
+            - statusCode: 200
+            - contentType: json
+            - hasProperty: "success"
+      - think: 2
+
+  - name: "Validate TLE"
+    weight: 15
+    flow:
+      - post:
+          url: "/v1/validate"
+          headers:
+            Content-Type: "application/json"
+            X-API-Key: "{{ apiKey }}"
+          json:
+            tle: "ISS (ZARYA)\n1 25544U 98067A   24325.50000000  .00016717  00000-0  10270-3 0  9005\n2 25544  51.6400 220.1003 0008380  87.5100  53.2300 15.50030060123456"
+          expect:
+            - statusCode: 200
+            - hasProperty: "valid"
+      - think: 1
+
+  - name: "Calculate position"
+    weight: 20
+    flow:
+      - post:
+          url: "/v1/calculate/position"
+          headers:
+            Content-Type: "application/json"
+            X-API-Key: "{{ apiKey }}"
+          json:
+            tle: "ISS (ZARYA)\n1 25544U 98067A   24325.50000000  .00016717  00000-0  10270-3 0  9005\n2 25544  51.6400 220.1003 0008380  87.5100  53.2300 15.50030060123456"
+            timestamp: "{{ $datetime }}"
+          expect:
+            - statusCode: 200
+            - hasProperty: "position"
+            - hasProperty: "altitude"
+      - think: 2
+
+  - name: "Health check"
+    weight: 5
+    flow:
+      - get:
+          url: "/v1/health"
+          expect:
+            - statusCode: 200
+            - hasProperty: "status"
+      - think: 5

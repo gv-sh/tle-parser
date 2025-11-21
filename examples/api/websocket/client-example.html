@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TLE Parser WebSocket Client</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #555;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+        .connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .controls {
+            margin: 15px 0;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+            font-size: 14px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        input, select {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+        .messages {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .message {
+            margin-bottom: 10px;
+            padding: 5px;
+            border-left: 3px solid #007bff;
+            background-color: white;
+        }
+        .error {
+            border-left-color: #dc3545;
+            background-color: #f8d7da;
+        }
+        .data-display {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        .data-item {
+            background-color: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .data-label {
+            font-weight: bold;
+            color: #555;
+            font-size: 12px;
+        }
+        .data-value {
+            font-size: 18px;
+            color: #007bff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>TLE Parser WebSocket Client</h1>
+
+        <div id="status" class="status disconnected">
+            ⚫ Disconnected
+        </div>
+
+        <div class="controls">
+            <button id="connectBtn" onclick="connect()">Connect</button>
+            <button id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
+            <button onclick="clearMessages()">Clear Messages</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>Subscribe to Position Updates</h2>
+        <div class="controls">
+            <input type="number" id="positionCatalogNumber" placeholder="Catalog Number (e.g., 25544)" value="25544">
+            <input type="number" id="positionInterval" placeholder="Interval (ms)" value="5000">
+            <button onclick="subscribePosition()">Subscribe</button>
+            <button onclick="unsubscribePosition()">Unsubscribe</button>
+        </div>
+
+        <div class="data-display" id="positionData"></div>
+    </div>
+
+    <div class="container">
+        <h2>Subscribe to Visibility Updates</h2>
+        <div class="controls">
+            <input type="number" id="visibilityCatalogNumber" placeholder="Catalog Number" value="25544">
+            <input type="number" id="observerLat" placeholder="Latitude" value="40.7128">
+            <input type="number" id="observerLon" placeholder="Longitude" value="-74.0060">
+            <input type="number" id="observerAlt" placeholder="Altitude (m)" value="10">
+            <button onclick="subscribeVisibility()">Subscribe</button>
+            <button onclick="unsubscribeVisibility()">Unsubscribe</button>
+        </div>
+
+        <div id="visibilityData"></div>
+    </div>
+
+    <div class="container">
+        <h2>Messages</h2>
+        <div id="messages" class="messages"></div>
+    </div>
+
+    <script>
+        let ws = null;
+
+        function connect() {
+            const wsUrl = 'ws://localhost:8080';
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                updateStatus(true);
+                addMessage('Connected to WebSocket server');
+            };
+
+            ws.onmessage = (event) => {
+                const message = JSON.parse(event.data);
+                handleMessage(message);
+            };
+
+            ws.onclose = () => {
+                updateStatus(false);
+                addMessage('Disconnected from WebSocket server', true);
+            };
+
+            ws.onerror = (error) => {
+                addMessage('WebSocket error: ' + error, true);
+            };
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+
+        function updateStatus(connected) {
+            const statusEl = document.getElementById('status');
+            const connectBtn = document.getElementById('connectBtn');
+            const disconnectBtn = document.getElementById('disconnectBtn');
+
+            if (connected) {
+                statusEl.className = 'status connected';
+                statusEl.textContent = '🟢 Connected';
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+            } else {
+                statusEl.className = 'status disconnected';
+                statusEl.textContent = '⚫ Disconnected';
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+            }
+        }
+
+        function handleMessage(message) {
+            addMessage(JSON.stringify(message, null, 2));
+
+            switch (message.type) {
+                case 'position:update':
+                    updatePositionDisplay(message.data);
+                    break;
+                case 'visibility:update':
+                    updateVisibilityDisplay(message.data);
+                    break;
+                case 'error':
+                    console.error('Error:', message.error);
+                    break;
+            }
+        }
+
+        function subscribePosition() {
+            const catalogNumber = parseInt(document.getElementById('positionCatalogNumber').value);
+            const interval = parseInt(document.getElementById('positionInterval').value);
+
+            sendMessage({
+                type: 'subscribe:position',
+                data: { catalogNumber, interval }
+            });
+        }
+
+        function unsubscribePosition() {
+            const catalogNumber = parseInt(document.getElementById('positionCatalogNumber').value);
+            sendMessage({
+                type: 'unsubscribe',
+                data: { type: 'position', catalogNumber }
+            });
+        }
+
+        function subscribeVisibility() {
+            const catalogNumber = parseInt(document.getElementById('visibilityCatalogNumber').value);
+            const latitude = parseFloat(document.getElementById('observerLat').value);
+            const longitude = parseFloat(document.getElementById('observerLon').value);
+            const altitude = parseFloat(document.getElementById('observerAlt').value);
+
+            sendMessage({
+                type: 'subscribe:visibility',
+                data: {
+                    catalogNumber,
+                    observer: { latitude, longitude, altitude }
+                }
+            });
+        }
+
+        function unsubscribeVisibility() {
+            const catalogNumber = parseInt(document.getElementById('visibilityCatalogNumber').value);
+            sendMessage({
+                type: 'unsubscribe',
+                data: { type: 'visibility', catalogNumber }
+            });
+        }
+
+        function sendMessage(message) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(message));
+            } else {
+                addMessage('Not connected to WebSocket server', true);
+            }
+        }
+
+        function updatePositionDisplay(data) {
+            const container = document.getElementById('positionData');
+            container.innerHTML = `
+                <div class="data-item">
+                    <div class="data-label">Altitude</div>
+                    <div class="data-value">${data.altitude.toFixed(2)} km</div>
+                </div>
+                <div class="data-item">
+                    <div class="data-label">Latitude</div>
+                    <div class="data-value">${data.latitude.toFixed(4)}°</div>
+                </div>
+                <div class="data-item">
+                    <div class="data-label">Longitude</div>
+                    <div class="data-value">${data.longitude.toFixed(4)}°</div>
+                </div>
+                <div class="data-item">
+                    <div class="data-label">Timestamp</div>
+                    <div class="data-value">${new Date(data.timestamp).toLocaleTimeString()}</div>
+                </div>
+            `;
+        }
+
+        function updateVisibilityDisplay(data) {
+            const container = document.getElementById('visibilityData');
+
+            if (data.passes.length === 0) {
+                container.innerHTML = '<p>No visible passes in the next 24 hours</p>';
+                return;
+            }
+
+            const passesHtml = data.passes.map((pass, index) => `
+                <div class="data-item">
+                    <div class="data-label">Pass ${index + 1}</div>
+                    <div class="data-value">
+                        ${new Date(pass.startTime).toLocaleString()}<br>
+                        Max Elevation: ${pass.maxElevation.toFixed(2)}°<br>
+                        Duration: ${Math.floor(pass.duration / 60)} min
+                    </div>
+                </div>
+            `).join('');
+
+            container.innerHTML = `<div class="data-display">${passesHtml}</div>`;
+        }
+
+        function addMessage(text, isError = false) {
+            const messagesEl = document.getElementById('messages');
+            const messageEl = document.createElement('div');
+            messageEl.className = 'message' + (isError ? ' error' : '');
+            messageEl.textContent = text;
+            messagesEl.appendChild(messageEl);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+
+        function clearMessages() {
+            document.getElementById('messages').innerHTML = '';
+        }
+
+        // Auto-connect on page load
+        window.onload = () => {
+            connect();
+        };
+    </script>
+</body>
+</html>

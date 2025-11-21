@@ -1,0 +1,641 @@
+openapi: 3.0.3
+info:
+  title: TLE Parser API
+  description: |
+    RESTful API for parsing and working with Two-Line Element (TLE) satellite data.
+
+    This API provides endpoints for:
+    - Parsing TLE data in various formats
+    - Validating TLE data
+    - Fetching TLE data from external sources
+    - Calculating orbital parameters and predictions
+    - Managing TLE data in databases
+
+    ## Features
+    - Comprehensive TLE parsing and validation
+    - Support for batch processing
+    - Real-time satellite tracking
+    - Orbital calculations using SGP4/SDP4
+    - Multiple output formats (JSON, XML, CSV, etc.)
+    - Rate limiting and authentication
+    - API versioning
+
+  version: 1.0.0
+  contact:
+    name: TLE Parser Support
+    url: https://github.com/gv-sh/tle-parser
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.tleparser.com/v1
+    description: Production server
+  - url: https://staging-api.tleparser.com/v1
+    description: Staging server
+  - url: http://localhost:3000/v1
+    description: Local development server
+
+tags:
+  - name: Parse
+    description: TLE parsing operations
+  - name: Validate
+    description: TLE validation operations
+  - name: Fetch
+    description: TLE data acquisition from external sources
+  - name: Calculate
+    description: Orbital calculations and predictions
+  - name: Health
+    description: API health and status endpoints
+  - name: Batch
+    description: Batch processing operations
+
+paths:
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check endpoint
+      description: Returns the health status of the API
+      operationId: getHealth
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: API is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /parse:
+    post:
+      tags:
+        - Parse
+      summary: Parse TLE data
+      description: Parse a single TLE from string input
+      operationId: parseTLE
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParseRequest'
+      responses:
+        '200':
+          description: Successfully parsed TLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParsedTLE'
+        '400':
+          description: Invalid TLE format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        - ApiKeyAuth: []
+
+  /parse/batch:
+    post:
+      tags:
+        - Parse
+        - Batch
+      summary: Parse multiple TLEs
+      description: Parse multiple TLEs from a single request
+      operationId: parseBatchTLE
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchParseRequest'
+          text/plain:
+            schema:
+              type: string
+              description: Raw TLE data with multiple satellites
+      responses:
+        '200':
+          description: Successfully parsed TLEs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchParseResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        - ApiKeyAuth: []
+
+  /validate:
+    post:
+      tags:
+        - Validate
+      summary: Validate TLE data
+      description: Validate TLE format and checksums without full parsing
+      operationId: validateTLE
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidateRequest'
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        - ApiKeyAuth: []
+
+  /fetch/{source}/{catalogNumber}:
+    get:
+      tags:
+        - Fetch
+      summary: Fetch TLE from external source
+      description: Fetch the latest TLE for a satellite from CelesTrak or Space-Track
+      operationId: fetchTLE
+      parameters:
+        - name: source
+          in: path
+          required: true
+          description: Data source (celestrak or spacetrack)
+          schema:
+            type: string
+            enum: [celestrak, spacetrack]
+        - name: catalogNumber
+          in: path
+          required: true
+          description: NORAD catalog number
+          schema:
+            type: integer
+            minimum: 1
+            example: 25544
+        - name: format
+          in: query
+          description: Output format
+          schema:
+            type: string
+            enum: [json, xml, csv, tle]
+            default: json
+      responses:
+        '200':
+          description: Successfully fetched TLE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParsedTLE'
+        '404':
+          description: Satellite not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: External service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        - ApiKeyAuth: []
+
+  /calculate/position:
+    post:
+      tags:
+        - Calculate
+      summary: Calculate satellite position
+      description: Calculate satellite position at a given time using SGP4
+      operationId: calculatePosition
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PositionRequest'
+      responses:
+        '200':
+          description: Successfully calculated position
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PositionResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        - ApiKeyAuth: []
+
+  /calculate/visibility:
+    post:
+      tags:
+        - Calculate
+      summary: Calculate satellite visibility
+      description: Calculate when a satellite is visible from a ground location
+      operationId: calculateVisibility
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VisibilityRequest'
+      responses:
+        '200':
+          description: Successfully calculated visibility windows
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisibilityResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        - ApiKeyAuth: []
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for authentication
+
+  schemas:
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - timestamp
+        - version
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy, degraded]
+          example: healthy
+        timestamp:
+          type: string
+          format: date-time
+          example: '2024-11-21T10:30:00Z'
+        version:
+          type: string
+          example: '1.0.0'
+        uptime:
+          type: integer
+          description: Uptime in seconds
+          example: 3600
+        metrics:
+          type: object
+          properties:
+            requestsProcessed:
+              type: integer
+              example: 10000
+            averageResponseTime:
+              type: number
+              example: 45.5
+            errorRate:
+              type: number
+              example: 0.01
+
+    ParseRequest:
+      type: object
+      required:
+        - tle
+      properties:
+        tle:
+          type: string
+          description: TLE data (2-line or 3-line format)
+          example: |
+            ISS (ZARYA)
+            1 25544U 98067A   24325.50000000  .00016717  00000-0  10270-3 0  9005
+            2 25544  51.6400 220.1003 0008380  87.5100  53.2300 15.50030060123456
+        strict:
+          type: boolean
+          default: true
+          description: Use strict parsing mode
+        includeMetadata:
+          type: boolean
+          default: false
+          description: Include metadata in response
+
+    BatchParseRequest:
+      type: object
+      required:
+        - tles
+      properties:
+        tles:
+          type: array
+          items:
+            type: string
+          description: Array of TLE strings
+        strict:
+          type: boolean
+          default: true
+        continueOnError:
+          type: boolean
+          default: false
+          description: Continue parsing if one TLE fails
+
+    ValidateRequest:
+      type: object
+      required:
+        - tle
+      properties:
+        tle:
+          type: string
+        rules:
+          type: array
+          items:
+            type: string
+          description: Custom validation rules to apply
+
+    PositionRequest:
+      type: object
+      required:
+        - tle
+        - timestamp
+      properties:
+        tle:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+          example: '2024-11-21T10:30:00Z'
+        coordinateSystem:
+          type: string
+          enum: [TEME, J2000, ECEF]
+          default: TEME
+
+    VisibilityRequest:
+      type: object
+      required:
+        - tle
+        - observer
+        - startTime
+        - endTime
+      properties:
+        tle:
+          type: string
+        observer:
+          $ref: '#/components/schemas/Observer'
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        minElevation:
+          type: number
+          minimum: 0
+          maximum: 90
+          default: 10
+
+    Observer:
+      type: object
+      required:
+        - latitude
+        - longitude
+        - altitude
+      properties:
+        latitude:
+          type: number
+          minimum: -90
+          maximum: 90
+          example: 40.7128
+        longitude:
+          type: number
+          minimum: -180
+          maximum: 180
+          example: -74.0060
+        altitude:
+          type: number
+          description: Altitude in meters
+          example: 10
+
+    ParsedTLE:
+      type: object
+      properties:
+        name:
+          type: string
+          example: ISS (ZARYA)
+        catalogNumber:
+          type: integer
+          example: 25544
+        classification:
+          type: string
+          example: U
+        internationalDesignator:
+          type: string
+          example: 98067A
+        epoch:
+          type: string
+          format: date-time
+          example: '2024-11-21T12:00:00Z'
+        meanMotionDerivative:
+          type: number
+        meanMotionSecondDerivative:
+          type: number
+        bstar:
+          type: number
+          example: 0.0001027
+        ephemerisType:
+          type: integer
+        elementSetNumber:
+          type: integer
+        checksum1:
+          type: integer
+        inclination:
+          type: number
+          example: 51.64
+        rightAscension:
+          type: number
+        eccentricity:
+          type: number
+        argumentOfPerigee:
+          type: number
+        meanAnomaly:
+          type: number
+        meanMotion:
+          type: number
+          example: 15.50030060
+        revNumber:
+          type: integer
+        checksum2:
+          type: integer
+        metadata:
+          type: object
+          properties:
+            source:
+              type: string
+            fetchedAt:
+              type: string
+              format: date-time
+            quality:
+              type: string
+
+    BatchParseResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        total:
+          type: integer
+        parsed:
+          type: integer
+        failed:
+          type: integer
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              index:
+                type: integer
+              success:
+                type: boolean
+              data:
+                $ref: '#/components/schemas/ParsedTLE'
+              error:
+                $ref: '#/components/schemas/ErrorDetail'
+
+    ValidationResponse:
+      type: object
+      required:
+        - valid
+      properties:
+        valid:
+          type: boolean
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErrorDetail'
+        warnings:
+          type: array
+          items:
+            type: string
+        quality:
+          type: object
+          properties:
+            score:
+              type: number
+              minimum: 0
+              maximum: 100
+            level:
+              type: string
+              enum: [excellent, good, fair, poor]
+
+    PositionResponse:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        position:
+          type: object
+          properties:
+            x:
+              type: number
+              description: X coordinate in km
+            y:
+              type: number
+              description: Y coordinate in km
+            z:
+              type: number
+              description: Z coordinate in km
+        velocity:
+          type: object
+          properties:
+            x:
+              type: number
+              description: X velocity in km/s
+            y:
+              type: number
+              description: Y velocity in km/s
+            z:
+              type: number
+              description: Z velocity in km/s
+        altitude:
+          type: number
+          description: Altitude in km
+        latitude:
+          type: number
+        longitude:
+          type: number
+
+    VisibilityResponse:
+      type: object
+      properties:
+        passes:
+          type: array
+          items:
+            type: object
+            properties:
+              startTime:
+                type: string
+                format: date-time
+              endTime:
+                type: string
+                format: date-time
+              maxElevation:
+                type: number
+              duration:
+                type: integer
+                description: Duration in seconds
+              direction:
+                type: string
+                description: General direction of pass
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorDetail'
+
+    ErrorDetail:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          example: INVALID_TLE_FORMAT
+        message:
+          type: string
+          example: Invalid TLE format
+        details:
+          type: object
+        field:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
