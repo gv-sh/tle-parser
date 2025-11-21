@@ -1,0 +1,347 @@
+# TLE Parser GraphQL Schema
+
+"""
+Root query type
+"""
+type Query {
+  """
+  Parse a single TLE
+  """
+  parseTLE(input: ParseTLEInput!): ParsedTLE!
+
+  """
+  Parse multiple TLEs
+  """
+  parseBatch(input: BatchParseInput!): BatchParseResult!
+
+  """
+  Validate a TLE
+  """
+  validateTLE(input: ValidateTLEInput!): ValidationResult!
+
+  """
+  Fetch TLE from external source
+  """
+  fetchTLE(source: DataSource!, catalogNumber: Int!): ParsedTLE!
+
+  """
+  Search satellites by name
+  """
+  searchSatellites(query: String!, limit: Int = 10): [Satellite!]!
+
+  """
+  Get satellite by catalog number
+  """
+  getSatellite(catalogNumber: Int!): Satellite
+
+  """
+  Calculate satellite position at a given time
+  """
+  calculatePosition(input: PositionInput!): SatellitePosition!
+
+  """
+  Calculate satellite visibility from observer location
+  """
+  calculateVisibility(input: VisibilityInput!): VisibilityResult!
+
+  """
+  Get API health status
+  """
+  health: HealthStatus!
+}
+
+"""
+Root mutation type
+"""
+type Mutation {
+  """
+  Store a TLE in the database
+  """
+  storeTLE(input: StoreTLEInput!): StoreTLEResult!
+
+  """
+  Update an existing TLE
+  """
+  updateTLE(catalogNumber: Int!, input: UpdateTLEInput!): UpdateTLEResult!
+
+  """
+  Delete a TLE from the database
+  """
+  deleteTLE(catalogNumber: Int!): DeleteResult!
+}
+
+"""
+Root subscription type for real-time updates
+"""
+type Subscription {
+  """
+  Subscribe to TLE updates for a specific satellite
+  """
+  tleUpdated(catalogNumber: Int!): ParsedTLE!
+
+  """
+  Subscribe to satellite position updates
+  """
+  positionUpdated(catalogNumber: Int!, interval: Int = 5000): SatellitePosition!
+
+  """
+  Subscribe to all TLE updates
+  """
+  allTLEUpdates: TLEUpdate!
+}
+
+# Input Types
+
+input ParseTLEInput {
+  tle: String!
+  strict: Boolean = true
+  includeMetadata: Boolean = false
+}
+
+input BatchParseInput {
+  tles: [String!]!
+  strict: Boolean = true
+  continueOnError: Boolean = false
+}
+
+input ValidateTLEInput {
+  tle: String!
+  rules: [String!]
+}
+
+input PositionInput {
+  tle: String!
+  timestamp: DateTime!
+  coordinateSystem: CoordinateSystem = TEME
+}
+
+input VisibilityInput {
+  tle: String!
+  observer: ObserverInput!
+  startTime: DateTime!
+  endTime: DateTime!
+  minElevation: Float = 10.0
+}
+
+input ObserverInput {
+  latitude: Float!
+  longitude: Float!
+  altitude: Float!
+}
+
+input StoreTLEInput {
+  tle: String!
+  metadata: TLEMetadataInput
+}
+
+input UpdateTLEInput {
+  tle: String!
+  metadata: TLEMetadataInput
+}
+
+input TLEMetadataInput {
+  source: String
+  tags: [String!]
+  notes: String
+}
+
+# Object Types
+
+type ParsedTLE {
+  name: String!
+  catalogNumber: Int!
+  classification: String!
+  internationalDesignator: String!
+  epoch: DateTime!
+  epochYear: Int!
+  epochDay: Float!
+  meanMotionDerivative: Float!
+  meanMotionSecondDerivative: Float!
+  bstar: Float!
+  ephemerisType: Int!
+  elementSetNumber: Int!
+  checksum1: Int!
+  inclination: Float!
+  rightAscension: Float!
+  eccentricity: Float!
+  argumentOfPerigee: Float!
+  meanAnomaly: Float!
+  meanMotion: Float!
+  revNumber: Int!
+  checksum2: Int!
+  metadata: TLEMetadata
+}
+
+type TLEMetadata {
+  source: String
+  fetchedAt: DateTime
+  quality: String
+  tags: [String!]
+  notes: String
+}
+
+type BatchParseResult {
+  success: Boolean!
+  total: Int!
+  parsed: Int!
+  failed: Int!
+  results: [ParseResult!]!
+}
+
+type ParseResult {
+  index: Int!
+  success: Boolean!
+  data: ParsedTLE
+  error: Error
+}
+
+type ValidationResult {
+  valid: Boolean!
+  errors: [Error!]!
+  warnings: [String!]!
+  quality: QualityScore!
+}
+
+type QualityScore {
+  score: Float!
+  level: QualityLevel!
+}
+
+type Satellite {
+  catalogNumber: Int!
+  name: String!
+  tle: ParsedTLE
+  launchDate: DateTime
+  decayDate: DateTime
+  objectType: String
+  rcsSize: String
+  country: String
+}
+
+type SatellitePosition {
+  timestamp: DateTime!
+  position: Vector3!
+  velocity: Vector3!
+  altitude: Float!
+  latitude: Float!
+  longitude: Float!
+  eclipsed: Boolean!
+}
+
+type Vector3 {
+  x: Float!
+  y: Float!
+  z: Float!
+}
+
+type VisibilityResult {
+  passes: [Pass!]!
+  nextPass: Pass
+}
+
+type Pass {
+  startTime: DateTime!
+  endTime: DateTime!
+  duration: Int!
+  maxElevation: Float!
+  maxElevationTime: DateTime!
+  direction: String!
+  perigee: Float!
+  azimuthStart: Float!
+  azimuthEnd: Float!
+}
+
+type StoreTLEResult {
+  success: Boolean!
+  catalogNumber: Int!
+  message: String
+  error: Error
+}
+
+type UpdateTLEResult {
+  success: Boolean!
+  catalogNumber: Int!
+  updated: Boolean!
+  message: String
+  error: Error
+}
+
+type DeleteResult {
+  success: Boolean!
+  catalogNumber: Int!
+  deleted: Boolean!
+  message: String
+}
+
+type TLEUpdate {
+  catalogNumber: Int!
+  tle: ParsedTLE!
+  updateType: UpdateType!
+  timestamp: DateTime!
+}
+
+type HealthStatus {
+  status: HealthStatusEnum!
+  timestamp: DateTime!
+  version: String!
+  uptime: Int!
+  metrics: Metrics
+}
+
+type Metrics {
+  requestsProcessed: Int!
+  averageResponseTime: Float!
+  errorRate: Float!
+}
+
+type Error {
+  code: String!
+  message: String!
+  field: String
+  details: String
+}
+
+# Enums
+
+enum DataSource {
+  CELESTRAK
+  SPACETRACK
+}
+
+enum CoordinateSystem {
+  TEME
+  J2000
+  ECEF
+}
+
+enum QualityLevel {
+  EXCELLENT
+  GOOD
+  FAIR
+  POOR
+  UNKNOWN
+}
+
+enum UpdateType {
+  NEW
+  UPDATED
+  DELETED
+}
+
+enum HealthStatusEnum {
+  HEALTHY
+  UNHEALTHY
+  DEGRADED
+}
+
+# Scalars
+
+"""
+Custom scalar for DateTime
+"""
+scalar DateTime
+
+"""
+Custom scalar for JSON
+"""
+scalar JSON

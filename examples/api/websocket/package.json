@@ -1,0 +1,23 @@
+{
+  "name": "tle-parser-websocket-api",
+  "version": "1.0.0",
+  "description": "WebSocket API for TLE Parser real-time updates",
+  "main": "server.ts",
+  "scripts": {
+    "dev": "ts-node server.ts",
+    "start": "node dist/server.js",
+    "build": "tsc",
+    "test": "jest"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.14.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.17",
+    "@types/node": "^20.0.0",
+    "@types/ws": "^8.5.5",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.0.0"
+  }
+}
