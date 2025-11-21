@@ -1,0 +1,12 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: Arial, sans-serif; background: #000; color: white; overflow: hidden; }
+.app { width: 100vw; height: 100vh; position: relative; }
+.canvas-container { width: 100%; height: 100%; }
+.controls-panel { position: absolute; top: 20px; left: 20px; background: rgba(0, 0, 0, 0.8); padding: 20px; border-radius: 10px; min-width: 300px; }
+.controls-panel h2 { margin-bottom: 15px; }
+.satellite-list { max-height: 300px; overflow-y: auto; margin-top: 15px; }
+.satellite-item { background: rgba(255, 255, 255, 0.1); padding: 10px; margin-bottom: 8px; border-radius: 5px; cursor: pointer; }
+.satellite-item:hover { background: rgba(255, 255, 255, 0.2); }
+.time-controls { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.8); padding: 15px; border-radius: 10px; }
+.btn { padding: 10px 20px; margin: 5px; background: #4CAF50; border: none; border-radius: 5px; color: white; cursor: pointer; }
+.btn:hover { background: #45a049; }

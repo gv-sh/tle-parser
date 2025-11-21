@@ -1,0 +1,11 @@
+.coverage-chart {
+  background: rgba(10, 14, 39, 0.8);
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  border-radius: 10px;
+  padding: 20px;
+  height: 250px;
+}
+
+.coverage-chart canvas {
+  max-height: 210px;
+}

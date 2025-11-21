@@ -79,6 +79,25 @@ Comprehensive documentation is available in the [docs](docs/) directory:
 ### Build & Development
 - **[Build System Documentation](BUILD.md)** - Modern build pipeline, bundle formats, and publishing
 
+## 🚀 Demo Applications
+
+Explore 12 production-quality demo applications showcasing real-world use cases:
+
+- **[ISS Tracker](demos/01-iss-tracker/)** - Real-time International Space Station tracking
+- **[Starlink Visualizer](demos/02-starlink-visualizer/)** - Interactive Starlink constellation visualization
+- **[Satellite Pass Predictor](demos/03-satellite-pass-predictor/)** - Calculate visible satellite passes
+- **[Ham Radio Scheduler](demos/04-ham-radio-scheduler/)** - Amateur radio satellite scheduler
+- **[Space Debris Tracker](demos/05-space-debris-tracker/)** - Track and analyze space debris
+- **[Ground Station Planner](demos/06-ground-station-planner/)** - Multi-satellite scheduling
+- **[TLE File Manager](demos/07-tle-file-manager/)** - Parse, validate, and manage TLE files
+- **[Orbital Simulation Game](demos/08-orbital-simulation-game/)** - Educational orbital mechanics game
+- **[Educational Astronomy Tool](demos/09-educational-astronomy/)** - Interactive lessons on orbits
+- **[Collision Warning System](demos/10-collision-warning-system/)** - Monitor satellite conjunctions
+- **[Satellite Photography Planner](demos/11-satellite-photography-planner/)** - Plan satellite photography
+- **[3D Earth Orbit Viewer](demos/12-realtime-3d-earth-viewer/)** - Real-time 3D orbit visualization
+
+See the [demos directory](demos/) for complete documentation and setup instructions.
+
 ## Installation
 
 ### From npm (coming soon)

@@ -296,18 +296,18 @@ TLE parsers serve critical functions across multiple domains:
 ## Week 9: Community, Demos & Education
 
 ### Demo Applications
-- [ ] Build ISS tracker web application
-- [ ] Create Starlink constellation visualizer
-- [ ] Add satellite pass predictor example
-- [ ] Build ham radio satellite scheduler
-- [ ] Create space debris tracker demo
-- [ ] Add ground station planner application
-- [ ] Build TLE file manager GUI
-- [ ] Create orbital simulation game
-- [ ] Add educational astronomy tool
-- [ ] Build collision warning system demo
-- [ ] Create satellite photography planning tool
-- [ ] Add real-time 3D Earth orbit viewer
+- [x] Build ISS tracker web application
+- [x] Create Starlink constellation visualizer
+- [x] Add satellite pass predictor example
+- [x] Build ham radio satellite scheduler
+- [x] Create space debris tracker demo
+- [x] Add ground station planner application
+- [x] Build TLE file manager GUI
+- [x] Create orbital simulation game
+- [x] Add educational astronomy tool
+- [x] Build collision warning system demo
+- [x] Create satellite photography planning tool
+- [x] Add real-time 3D Earth orbit viewer
 
 ### Educational Resources
 - [ ] Write beginner's guide to TLE format
