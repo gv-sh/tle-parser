@@ -1,0 +1,68 @@
+.starlink-map {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.leaflet-container {
+  background: #0a0e27;
+  font-family: inherit;
+}
+
+.satellite-popup h3 {
+  margin: 0 0 10px 0;
+  color: #00d4ff;
+  font-size: 1.1rem;
+}
+
+.satellite-popup table {
+  width: 100%;
+  font-size: 0.85rem;
+}
+
+.satellite-popup td {
+  padding: 3px 8px;
+}
+
+.satellite-popup td:first-child {
+  font-weight: 600;
+  color: #8892b0;
+}
+
+.map-legend {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  background: rgba(10, 14, 39, 0.95);
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  z-index: 1000;
+  min-width: 200px;
+}
+
+.map-legend h4 {
+  margin: 0 0 10px 0;
+  color: #00d4ff;
+  font-size: 0.95rem;
+}
+
+.legend-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+}
+
+.legend-color {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+}
