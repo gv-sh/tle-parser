@@ -50,6 +50,7 @@
     "dist",
     "**/*.test.ts",
     "**/*.test.js",
-    "__tests__"
+    "__tests__",
+    "src/database/**/*"
   ]
 }
