@@ -40,7 +40,6 @@
     "test:watch": "jest --watch",
     "test:coverage": "npm run build && jest --coverage",
     "test:verbose": "npm run build && jest --verbose",
-    "test:legacy": "node test.js",
     "prepublishOnly": "npm run build && npm run test && npm run size"
   },
   "repository": {
